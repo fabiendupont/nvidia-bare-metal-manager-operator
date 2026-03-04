@@ -1,0 +1,154 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "carbide.nvidia.com/v1alpha1",
+          "kind": "CarbideDeployment",
+          "metadata": {
+            "name": "bmm-minimal",
+            "namespace": "default"
+          },
+          "spec": {
+            "version": "latest",
+            "network": {
+              "interface": "enp2s0",
+              "ip": "192.168.33.10",
+              "gateway": "192.168.33.1",
+              "domain": "carbide.local",
+              "adminNetworkCIDR": "192.168.33.0/24"
+            },
+            "infrastructure": {
+              "postgresql": {
+                "mode": "managed",
+                "version": "16",
+                "storage": {
+                  "size": "10Gi"
+                }
+              }
+            },
+            "core": {
+              "api": {
+                "organizationName": "test-org",
+                "providerName": "local-dev-provider",
+                "siteName": "local-dev-site"
+              },
+              "dhcp": {
+                "enabled": true
+              },
+              "pxe": {
+                "enabled": true,
+                "storage": {
+                  "size": "50Gi"
+                }
+              },
+              "dns": {
+                "enabled": true
+              }
+            }
+          }
+        }
+      ]
+    capabilities: Full Lifecycle
+    categories: Integration & Delivery
+    containerImage: ghcr.io/fabiendupont/nvidia-bare-metal-manager-operator:v0.1.0
+    description: Automates deployment and lifecycle management of NVIDIA Bare Metal
+      Manager infrastructure on Kubernetes clusters.
+    repository: https://github.com/NVIDIA/bare-metal-manager-operator
+  name: carbide-operator.v0.1.0
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: CarbideDeployment is the Schema for the carbidedeployments API
+      displayName: Carbide Deployment
+      kind: CarbideDeployment
+      name: carbidedeployments.carbide.nvidia.com
+      resources:
+      - kind: ConfigMap
+        name: ""
+        version: v1
+      - kind: Deployment
+        name: ""
+        version: apps/v1
+      - kind: Job
+        name: ""
+        version: batch/v1
+      - kind: PersistentVolumeClaim
+        name: ""
+        version: v1
+      - kind: Secret
+        name: ""
+        version: v1
+      - kind: Service
+        name: ""
+        version: v1
+      version: v1alpha1
+  description: |
+    The NVIDIA Bare Metal Manager (BMM) Operator automates the deployment and
+    lifecycle management of bare metal provisioning infrastructure on Kubernetes.
+
+    ## Deployment Profiles
+
+    The operator supports three deployment profiles:
+
+    * **management** — Deploys management-plane components (Temporal, Keycloak, REST API)
+    * **site** — Deploys site-level components (Carbide API, DHCP, PXE, DNS)
+    * **management-with-site** — Deploys all components for a single-cluster topology
+
+    ## Infrastructure Tiers
+
+    Components are organized into tiers that are deployed in order:
+
+    1. **Infrastructure** — PostgreSQL, SPIRE
+    2. **Identity** — Keycloak, realm configuration
+    3. **Orchestration** — Temporal workflow engine
+    4. **Core** — BMM REST API, DHCP, PXE, DNS services
+
+    ## Managed Dependencies
+
+    Each dependency can be operator-managed or point to an external instance,
+    allowing flexible integration with existing infrastructure.
+  displayName: NVIDIA Bare Metal Manager Operator
+  icon:
+  - base64data: PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iIzc2YjkwMCI+PHBhdGggZD0iTTEyLjA0IDEuNjRjLTIuMjggMC00LjE0IDEuODUtNC4xNCA0LjE0IDAgMi4yOCAxLjg2IDQuMTQgNC4xNCA0LjE0IDIuMjkgMCA0LjE0LTEuODYgNC4xNC00LjE0IDAtMi4yOS0xLjg1LTQuMTQtNC4xNC00LjE0Wm0wIDYuNjJjLTEuMzcgMC0yLjQ4LTEuMTEtMi40OC0yLjQ4czEuMTEtMi40OCAyLjQ4LTIuNDggMi40OCAxLjExIDIuNDggMi40OC0xLjExIDIuNDgtMi40OCAyLjQ4Wk0yMC4yIDEzLjI5Yy0uNDktLjQ5LTEuMTUtLjc2LTEuODUtLjc2cy0xLjM2LjI3LTEuODUuNzZsLTIuNjcgMi42N2MtLjQ5LjQ5LS43NiAxLjE1LS43NiAxLjg1cy4yNyAxLjM2Ljc2IDEuODVsLjg4Ljg4Yy40OS40OSAxLjE1Ljc2IDEuODUuNzZzMS4zNi0uMjcgMS44NS0uNzZsMi42Ny0yLjY3Yy40OS0uNDkuNzYtMS4xNS43Ni0xLjg1cy0uMjctMS4zNi0uNzYtMS44NWwtLjg4LS44OFptLS4yOSAzLjQ0LTIuNjcgMi42N2MtLjE2LjE2LS4zNi4yNC0uNTguMjRzLS40My0uMDgtLjU5LS4yNGwtLjg4LS44OGMtLjE2LS4xNi0uMjQtLjM2LS4yNC0uNTlzLjA4LS40My4yNC0uNTlsMi42Ny0yLjY3Yy4xNi0uMTYuMzYtLjI0LjU5LS4yNHMuNDMuMDguNTkuMjRsLjg4Ljg4Yy4xNi4xNi4yNC4zNi4yNC41OXMtLjA4LjQzLS4yNC41OVpNNy43MiAxMy4yOWMtLjQ5LS40OS0xLjE1LS43Ni0xLjg1LS43NnMtMS4zNi4yNy0xLjg1Ljc2bC0uODguODhjLS40OS40OS0uNzYgMS4xNS0uNzYgMS44NXMuMjcgMS4zNi43NiAxLjg1bDIuNjcgMi42N2MuNDkuNDkgMS4xNS43NiAxLjg1Ljc2czEuMzYtLjI3IDEuODUtLjc2bC44OC0uODhjLjQ5LS40OS43Ni0xLjE1Ljc2LTEuODVzLS4yNy0xLjM2LS43Ni0xLjg1bC0yLjY3LTIuNjdabS0uMjkgNS41M2MtLjE2LjE2LS4zNi4yNC0uNTkuMjRzLS40My0uMDgtLjU5LS4yNEwzLjU5IDE2LjE1Yy0uMTYtLjE2LS4yNC0uMzYtLjI0LS41OXMuMDgtLjQzLjI0LS41OWwuODgtLjg4Yy4xNi0uMTYuMzYtLjI0LjU5LS4yNHMuNDMuMDguNTkuMjRsMi42NyAyLjY3Yy4xNi4xNi4yNC4zNi4yNC41OXMtLjA4LjQzLS4yNC41OWwtLjg4Ljg4WiIvPjwvc3ZnPg==
+    mediatype: image/svg+xml
+  install:
+    spec:
+      deployments: null
+    strategy: deployment
+  installModes:
+  - supported: true
+    type: OwnNamespace
+  - supported: true
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - bare-metal
+  - provisioning
+  - nvidia
+  - pxe
+  - dhcp
+  - dns
+  - ipam
+  links:
+  - name: Documentation
+    url: https://github.com/NVIDIA/bare-metal-manager-operator/blob/main/docs/
+  - name: Source Code
+    url: https://github.com/NVIDIA/bare-metal-manager-operator
+  maintainers:
+  - email: fdupont@nvidia.com
+    name: Fabien Dupont
+  maturity: alpha
+  minKubeVersion: 1.28.0
+  provider:
+    name: NVIDIA
+  relatedImages:
+  - image: ghcr.io/fabiendupont/nvidia-bare-metal-manager-operator:v0.1.0
+    name: manager
+  version: 0.1.0

@@ -1,0 +1,82 @@
+apiVersion: carbide.nvidia.com/v1alpha1
+kind: CarbideDeployment
+metadata:
+  name: bmm-all-in-one
+  namespace: bmm
+spec:
+  # Management-with-site profile: deploys ALL components
+  # Suitable for single-cluster deployments or hub sites that also provision hardware
+  profile: management-with-site
+  version: "v1.0.0"
+
+  network:
+    # Provisioning network (required for site functionality)
+    interface: "enp2s0"
+    ip: "192.168.33.10"
+    adminNetworkCIDR: "192.168.33.0/24"
+    domain: "carbide.local"
+
+  infrastructure:
+    namespace: "bmm"
+    storageClass: "local-path"
+
+    postgresql:
+      mode: managed
+      version: "16"
+      storage:
+        size: 100Gi
+      replicas: 1
+      # Databases auto-configured: bmm-development, temporal, temporal-visibility, keycloak, forge
+
+
+  core:
+    # All site services enabled
+    api:
+      port: 1079
+      replicas: 1
+
+    dhcp:
+      enabled: true  # Auto-set by webhook
+
+    pxe:
+      enabled: true  # Auto-set by webhook
+      tftpPort: 69
+      httpPort: 8080
+      storage:
+        size: 50Gi
+
+    dns:
+      enabled: true  # Auto-set by webhook
+      port: 53
+
+    security:
+      tlsEnabled: false  # Disabled for dev
+      rbacBypass: true   # Disabled for dev
+
+  rest:
+    # REST tier enabled for management functionality
+    enabled: true  # Auto-set by webhook
+    namespace: "bmm"
+
+    temporal:
+      mode: managed
+      version: "1.22.0"
+      replicas: 1
+
+    keycloak:
+      mode: managed
+      realm: "bmm"
+
+    restAPI:
+      port: 8080
+      nodePort: 30388
+      replicas: 1
+
+    # Note: Organizations, Providers, and Sites are created by users via BMM UI/REST API
+    # The operator deploys both management infrastructure (site-manager, Temporal, Keycloak)
+    # and site services (carbide-api, DHCP, PXE, DNS) for all-in-one deployments
+    # Users create Site CRDs through the REST API after infrastructure is ready
+
+  images:
+    registry: "ghcr.io/nvidia"
+    pullPolicy: IfNotPresent

@@ -1,0 +1,57 @@
+apiVersion: carbide.nvidia.com/v1alpha1
+kind: CarbideDeployment
+metadata:
+  name: bmm-spoke
+  namespace: default
+spec:
+  version: "latest"
+
+  network:
+    interface: enp2s0
+    ip: 192.168.50.10
+    gateway: 192.168.50.1
+    domain: spoke.carbide.local
+    adminNetworkCIDR: 192.168.50.0/24
+
+  infrastructure:
+    postgresql:
+      mode: managed
+      version: "16"
+      storage:
+        size: 10Gi
+
+  core:
+    api:
+      organizationName: hub-org
+      providerName: hub-provider
+      siteName: edge-site-1
+    dhcp:
+      enabled: true
+    pxe:
+      enabled: true
+      storage:
+        size: 50Gi
+    dns:
+      enabled: true
+
+  rest:
+    enabled: true
+    # Connect to hub Temporal for orchestration
+    temporal:
+      mode: external
+      endpoint: temporal-frontend.hub.example.com:7233
+    # Use hub Keycloak for authentication
+    keycloak:
+      mode: external
+      realm: carbide
+      endpoint: https://hub.example.com/auth
+      clientSecretRef:
+        name: hub-keycloak-client
+        key: client-secret
+    restAPI:
+      port: 8080
+      replicas: 1
+    # Enable site agent to coordinate with hub
+    siteAgent:
+      enabled: true
+      hubTemporalEndpoint: temporal-frontend.hub.example.com:7233

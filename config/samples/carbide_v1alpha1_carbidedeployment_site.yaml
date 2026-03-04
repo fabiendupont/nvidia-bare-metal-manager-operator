@@ -1,0 +1,75 @@
+apiVersion: carbide.nvidia.com/v1alpha1
+kind: CarbideDeployment
+metadata:
+  name: bmm-site-boston
+  namespace: bmm-site-boston
+spec:
+  # Site profile: deploys only provisioning components
+  # Requires provisioning network configuration
+  profile: site
+  version: "v1.0.0"
+
+  # Optional: Link to Site CRD in hub cluster (documents hub-spoke relationship)
+  siteRef:
+    cluster: "https://management.k8s.example.com"  # Hub cluster identifier (URL, name, or omit if same cluster)
+    namespace: "carbide-mgmt"
+    name: "boston-site"
+    uuid: "site-boston-abc123"  # Should match Site CRD's spec.uuid
+
+  network:
+    # Provisioning network (required for site profile)
+    interface: "enp2s0"
+    ip: "192.168.33.10"
+    adminNetworkCIDR: "192.168.33.0/24"
+    domain: "bmm.example.com"
+
+  infrastructure:
+    namespace: "bmm-site-boston"
+    storageClass: "local-path"
+
+    postgresql:
+      mode: managed
+      version: "16"
+      storage:
+        size: 20Gi
+      replicas: 1
+      # Databases auto-configured: bmm-development
+
+
+  core:
+    # Site services enabled
+    api:
+      port: 1079
+      replicas: 2
+
+    dhcp:
+      enabled: true  # Auto-set by webhook
+
+    pxe:
+      enabled: true  # Auto-set by webhook
+      tftpPort: 69
+      httpPort: 8080
+      storage:
+        size: 100Gi
+
+    dns:
+      enabled: true  # Auto-set by webhook
+      port: 53
+
+    security:
+      tlsEnabled: true
+      rbacBypass: false
+
+  rest:
+    # REST tier disabled for site-only profiles
+    # Site services (carbide-api, DHCP, PXE, DNS) are deployed
+    enabled: false  # Auto-set by webhook
+
+    # Note: Site registration is done out-of-band:
+    # 1. User creates Site CRD via BMM UI/REST API in management cluster
+    # 2. site-manager (in management cluster) processes the Site CRD
+    # 3. Site is registered and can be used for provisioning
+
+  images:
+    registry: "ghcr.io/nvidia"
+    pullPolicy: IfNotPresent

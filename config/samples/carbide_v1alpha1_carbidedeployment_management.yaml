@@ -1,0 +1,71 @@
+apiVersion: carbide.nvidia.com/v1alpha1
+kind: CarbideDeployment
+metadata:
+  name: bmm-management
+  namespace: bmm-mgmt
+spec:
+  # Management profile: deploys only orchestration components
+  # No provisioning network required
+  profile: management
+  version: "v1.0.0"
+
+  network:
+    domain: "bmm.example.com"
+
+  infrastructure:
+    namespace: "carbide-mgmt"
+    storageClass: "local-path"
+
+    postgresql:
+      mode: managed
+      version: "16"
+      storage:
+        size: 50Gi
+      replicas: 1
+      # Databases auto-configured: temporal, temporal-visibility, keycloak, forge
+
+
+  core:
+    # Core tier minimal for management profile (no DHCP/PXE/DNS)
+    api:
+      port: 1079
+      replicas: 1
+
+    dhcp:
+      enabled: false  # Auto-set by webhook
+
+    pxe:
+      enabled: false  # Auto-set by webhook
+
+    dns:
+      enabled: false  # Auto-set by webhook
+
+    security:
+      tlsEnabled: true
+      rbacBypass: false
+
+  rest:
+    enabled: true
+    namespace: "carbide-mgmt"
+
+    temporal:
+      mode: managed
+      version: "1.22.0"
+      replicas: 1
+
+    keycloak:
+      mode: managed
+      realm: "bmm"
+
+    restAPI:
+      port: 8080
+      nodePort: 30388
+      replicas: 1
+
+    # Note: Organizations, Providers, and Sites are created by users via BMM UI/REST API
+    # The operator only deploys infrastructure (site-manager, Temporal, Keycloak, REST API)
+    # site-manager watches Site CRDs created through the REST API
+
+  images:
+    registry: "ghcr.io/nvidia"
+    pullPolicy: IfNotPresent

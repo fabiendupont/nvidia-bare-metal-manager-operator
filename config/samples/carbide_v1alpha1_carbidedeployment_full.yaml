@@ -1,0 +1,71 @@
+apiVersion: carbide.nvidia.com/v1alpha1
+kind: CarbideDeployment
+metadata:
+  name: bmm-full
+  namespace: default
+spec:
+  version: "latest"
+
+  network:
+    interface: enp2s0
+    ip: 192.168.33.10
+    gateway: 192.168.33.1
+    domain: carbide.local
+    adminNetworkCIDR: 192.168.33.0/24
+
+  infrastructure:
+    storageClass: lvms-vg1
+    postgresql:
+      mode: managed
+      version: "16"
+      storage:
+        size: 20Gi
+      replicas: 1
+
+  core:
+    api:
+      organizationName: hub-org
+      providerName: hub-provider
+      siteName: central-hub
+      port: 1079
+      replicas: 2
+      loopbackPrefix: "100.64.0.0/10"
+      vlanRangeStart: 100
+      vlanRangeEnd: 200
+    dhcp:
+      enabled: true
+      leaseTime: 7200
+    pxe:
+      enabled: true
+      storage:
+        size: 100Gi
+      port: 69
+    dns:
+      enabled: true
+      port: 53
+      forwarders:
+        - 8.8.8.8
+    security:
+      tlsEnabled: true
+      rbacBypass: false
+
+  rest:
+    enabled: true
+    temporal:
+      mode: managed
+      version: "1.22.0"  # Temporal version
+      namespace: temporal
+      replicas: 1  # Number of frontend instances
+    keycloak:
+      mode: managed
+      realm: carbide
+    restAPI:
+      port: 8080
+      nodePort: 30388
+      replicas: 2
+    siteAgent:
+      enabled: false
+
+  images:
+    registry: ghcr.io/nvidia
+    pullPolicy: IfNotPresent

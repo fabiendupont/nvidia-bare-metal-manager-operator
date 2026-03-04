@@ -1,0 +1,23 @@
+# More info: https://docs.docker.com/engine/reference/builder/#dockerignore-file
+# Ignore build artifacts and temporary files
+bin/
+testbin/
+bundle/
+catalog/
+*.test
+*.out
+.git/
+.github/
+
+# Re-include source directories
+!api/
+!cmd/
+!internal/
+!pkg/
+
+# Re-include Go module files
+!go.mod
+!go.sum
+
+# Exclude test files
+**/*_test.go

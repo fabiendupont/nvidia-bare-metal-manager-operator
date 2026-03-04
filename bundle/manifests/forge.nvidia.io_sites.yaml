@@ -1,0 +1,80 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  creationTimestamp: null
+  name: sites.forge.nvidia.io
+spec:
+  group: forge.nvidia.io
+  names:
+    kind: Site
+    plural: sites
+    shortNames:
+    - st
+    singular: site
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.sitename
+      name: Site Name
+      type: string
+    - jsonPath: .status.bootstrapstate
+      name: Bootstrap State
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            type: string
+          kind:
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              fcorg:
+                description: Organization identifier
+                type: string
+              provider:
+                description: Cloud provider or infrastructure type
+                type: string
+              sitename:
+                description: Human-readable name of the site
+                type: string
+              uuid:
+                description: Unique identifier for the site
+                type: string
+            type: object
+          status:
+            properties:
+              bootstrapstate:
+                description: Current bootstrap state (AwaitHandshake, HandshakeComplete,
+                  RegistrationComplete)
+                type: string
+              controlplanestatus:
+                description: Status of the control plane
+                type: string
+              otp:
+                properties:
+                  passcode:
+                    description: One-time passcode for site registration
+                    type: string
+                  timestamp:
+                    description: Expiry timestamp for the OTP
+                    type: string
+                type: object
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: null
+  storedVersions: null

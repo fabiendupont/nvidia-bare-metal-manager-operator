@@ -1,0 +1,54 @@
+apiVersion: carbide.nvidia.com/v1alpha1
+kind: CarbideDeployment
+metadata:
+  name: bmm-minimal
+  namespace: default
+spec:
+  profile: management-with-site
+  version: "latest"
+
+  tls:
+    mode: spiffe
+    spiffe:
+      trustDomain: carbide.local
+      helperImage: ghcr.io/nvidia/spiffe-helper:latest
+
+  network:
+    interface: enp2s0
+    ip: 192.168.33.10
+    domain: carbide.local
+    adminNetworkCIDR: 192.168.33.0/24
+
+  infrastructure:
+    postgresql:
+      mode: managed
+      version: "16"
+      storage:
+        size: 10Gi
+
+  core:
+    api:
+      port: 1079
+    dhcp:
+      enabled: true
+    pxe:
+      enabled: true
+      storage:
+        size: 50Gi
+    dns:
+      enabled: true
+    vault:
+      mode: managed
+    rla:
+      enabled: true
+    psm:
+      enabled: true
+
+  rest:
+    temporal:
+      mode: managed
+    keycloak:
+      mode: managed
+      realm: carbide
+    restAPI:
+      port: 8388

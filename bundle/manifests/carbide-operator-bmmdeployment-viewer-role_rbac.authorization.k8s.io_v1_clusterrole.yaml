@@ -1,0 +1,23 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: carbide-operator
+  name: carbide-operator-carbidedeployment-viewer-role
+rules:
+- apiGroups:
+  - carbide.nvidia.com
+  resources:
+  - carbidedeployments
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - carbide.nvidia.com
+  resources:
+  - carbidedeployments/status
+  verbs:
+  - get

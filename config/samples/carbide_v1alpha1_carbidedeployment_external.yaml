@@ -1,0 +1,72 @@
+apiVersion: carbide.nvidia.com/v1alpha1
+kind: CarbideDeployment
+metadata:
+  name: bmm-external
+  namespace: default
+spec:
+  profile: site
+  version: "latest"
+
+  tls:
+    mode: certManager
+    certManager:
+      issuerRef:
+        name: bmm-ca-issuer
+        kind: ClusterIssuer
+
+  network:
+    interface: enp2s0
+    ip: 192.168.33.10
+    domain: carbide.local
+    adminNetworkCIDR: 192.168.33.0/24
+
+  infrastructure:
+    postgresql:
+      mode: external
+      connection:
+        host: postgres.example.com
+        port: 5432
+        sslMode: require
+        userSecrets:
+          carbide:
+            name: pg-carbide-creds
+          forge:
+            name: pg-forge-creds
+          rla:
+            name: pg-rla-creds
+          psm:
+            name: pg-psm-creds
+
+  core:
+    api:
+      port: 1079
+    dhcp:
+      enabled: true
+    pxe:
+      enabled: true
+      storage:
+        size: 50Gi
+    dns:
+      enabled: true
+    vault:
+      mode: external
+      address: https://vault.example.com:8200
+      tokenSecretRef:
+        name: vault-token
+        key: token
+    rla:
+      enabled: true
+    psm:
+      enabled: true
+
+  rest:
+    keycloak:
+      mode: external
+      authProviders:
+        - name: corporate-sso
+          issuerURL: https://sso.example.com/realms/bmm
+          jwksURL: https://sso.example.com/realms/bmm/protocol/openid-connect/certs
+          clientID: carbide-api
+          clientSecretRef:
+            name: sso-client-secret
+            key: secret

@@ -1,0 +1,677 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: |-
+      [
+        {
+          "apiVersion": "carbide.nvidia.com/v1alpha1",
+          "kind": "CarbideDeployment",
+          "metadata": {
+            "name": "carbide-managed",
+            "namespace": "default"
+          },
+          "spec": {
+            "profile": "management-with-site",
+            "version": "latest",
+            "tls": {
+              "mode": "spiffe",
+              "spiffe": {
+                "trustDomain": "carbide.local",
+                "helperImage": "ghcr.io/nvidia/spiffe-helper:latest"
+              }
+            },
+            "network": {
+              "interface": "enp2s0",
+              "ip": "192.168.33.10",
+              "adminNetworkCIDR": "192.168.33.0/24",
+              "domain": "carbide.local"
+            },
+            "infrastructure": {
+              "postgresql": {
+                "mode": "managed",
+                "version": "16",
+                "storage": {
+                  "size": "10Gi"
+                }
+              }
+            },
+            "core": {
+              "api": {
+                "port": 1079
+              },
+              "dhcp": {
+                "enabled": true
+              },
+              "pxe": {
+                "enabled": true,
+                "storage": {
+                  "size": "50Gi"
+                }
+              },
+              "dns": {
+                "enabled": true
+              },
+              "vault": {
+                "mode": "managed"
+              },
+              "rla": {
+                "enabled": true
+              },
+              "psm": {
+                "enabled": true
+              }
+            },
+            "rest": {
+              "temporal": {
+                "mode": "managed"
+              },
+              "keycloak": {
+                "mode": "managed",
+                "realm": "carbide"
+              },
+              "restAPI": {
+                "port": 8388
+              }
+            }
+          }
+        },
+        {
+          "apiVersion": "carbide.nvidia.com/v1alpha1",
+          "kind": "CarbideDeployment",
+          "metadata": {
+            "name": "carbide-external",
+            "namespace": "default"
+          },
+          "spec": {
+            "profile": "site",
+            "version": "latest",
+            "tls": {
+              "mode": "certManager",
+              "certManager": {
+                "issuerRef": {
+                  "name": "carbide-ca-issuer",
+                  "kind": "ClusterIssuer"
+                }
+              }
+            },
+            "network": {
+              "interface": "enp2s0",
+              "ip": "192.168.33.10",
+              "adminNetworkCIDR": "192.168.33.0/24",
+              "domain": "carbide.local"
+            },
+            "infrastructure": {
+              "postgresql": {
+                "mode": "external",
+                "connection": {
+                  "host": "postgres.example.com",
+                  "port": 5432,
+                  "sslMode": "require",
+                  "userSecrets": {
+                    "carbide": {"name": "pg-carbide-creds"},
+                    "forge": {"name": "pg-forge-creds"},
+                    "rla": {"name": "pg-rla-creds"},
+                    "psm": {"name": "pg-psm-creds"}
+                  }
+                }
+              }
+            },
+            "core": {
+              "api": {
+                "port": 1079
+              },
+              "dhcp": {
+                "enabled": true
+              },
+              "pxe": {
+                "enabled": true,
+                "storage": {
+                  "size": "50Gi"
+                }
+              },
+              "dns": {
+                "enabled": true
+              },
+              "vault": {
+                "mode": "external",
+                "address": "https://vault.example.com:8200",
+                "tokenSecretRef": {
+                  "name": "vault-token",
+                  "key": "token"
+                }
+              },
+              "rla": {
+                "enabled": true
+              },
+              "psm": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        {
+          "apiVersion": "carbide.nvidia.com/v1alpha1",
+          "kind": "CarbideDeployment",
+          "metadata": {
+            "name": "carbide-management",
+            "namespace": "default"
+          },
+          "spec": {
+            "profile": "management",
+            "version": "latest",
+            "tls": {
+              "mode": "spiffe",
+              "spiffe": {
+                "trustDomain": "carbide.local"
+              }
+            },
+            "network": {
+              "domain": "carbide.example.com"
+            },
+            "infrastructure": {
+              "postgresql": {
+                "mode": "managed",
+                "version": "16",
+                "storage": {
+                  "size": "50Gi"
+                }
+              }
+            },
+            "core": {
+              "api": {
+                "port": 1079
+              }
+            },
+            "rest": {
+              "temporal": {
+                "mode": "managed"
+              },
+              "keycloak": {
+                "mode": "managed",
+                "realm": "carbide"
+              },
+              "restAPI": {
+                "port": 8080
+              }
+            }
+          }
+        },
+        {
+          "apiVersion": "carbide.nvidia.com/v1alpha1",
+          "kind": "CarbideDeployment",
+          "metadata": {
+            "name": "carbide-spoke",
+            "namespace": "default"
+          },
+          "spec": {
+            "profile": "site",
+            "version": "latest",
+            "tls": {
+              "mode": "spiffe",
+              "spiffe": {
+                "trustDomain": "carbide.local"
+              }
+            },
+            "siteRef": {
+              "namespace": "carbide-mgmt",
+              "name": "edge-site-1"
+            },
+            "network": {
+              "interface": "enp2s0",
+              "ip": "192.168.50.10",
+              "adminNetworkCIDR": "192.168.50.0/24",
+              "domain": "spoke.carbide.local"
+            },
+            "infrastructure": {
+              "postgresql": {
+                "mode": "managed",
+                "version": "16",
+                "storage": {
+                  "size": "10Gi"
+                }
+              }
+            },
+            "core": {
+              "api": {
+                "port": 1079
+              },
+              "dhcp": {
+                "enabled": true
+              },
+              "pxe": {
+                "enabled": true,
+                "storage": {
+                  "size": "50Gi"
+                }
+              },
+              "dns": {
+                "enabled": true
+              },
+              "vault": {
+                "mode": "managed"
+              },
+              "rla": {
+                "enabled": true
+              },
+              "psm": {
+                "enabled": true
+              }
+            }
+          }
+        }
+      ]
+    capabilities: Full Lifecycle
+    categories: Integration & Delivery
+    containerImage: ghcr.io/nvidia/nvidia-carbide-operator:v0.1.0
+    createdAt: "2026-03-04T00:00:00Z"
+    description: Automates deployment and lifecycle management of NVIDIA Bare Metal
+      Manager infrastructure on OpenShift and Kubernetes clusters.
+    operators.operatorframework.io/builder: operator-sdk-v1.39.1
+    operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
+    repository: https://github.com/NVIDIA/bare-metal-manager-operator
+    support: NVIDIA
+  name: nvidia-carbide-operator.v0.1.0
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: CarbideDeployment is the Schema for the carbidedeployments API
+      displayName: Carbide Deployment
+      kind: CarbideDeployment
+      name: carbidedeployments.carbide.nvidia.com
+      resources:
+      - kind: ConfigMap
+        name: ""
+        version: v1
+      - kind: Deployment
+        name: ""
+        version: apps/v1
+      - kind: Job
+        name: ""
+        version: batch/v1
+      - kind: PersistentVolumeClaim
+        name: ""
+        version: v1
+      - kind: Secret
+        name: ""
+        version: v1
+      - kind: Service
+        name: ""
+        version: v1
+      version: v1alpha1
+    - kind: Site
+      name: sites.forge.nvidia.io
+      version: v1
+  description: |
+    The NVIDIA Bare Metal Manager (BMM) Operator automates the deployment and
+    lifecycle management of bare metal provisioning infrastructure on OpenShift
+    and Kubernetes.
+
+    ## Deployment Profiles
+
+    The operator supports three deployment profiles:
+
+    * **management** -- Deploys management-plane components (Temporal, Keycloak, REST API, site-manager)
+    * **site** -- Deploys site-level components (Carbide API, DHCP, PXE, DNS, Vault, RLA, PSM)
+    * **management-with-site** -- Deploys all components for a single-cluster topology
+
+    ## Component Tiers
+
+    Components are organized into tiers deployed in dependency order:
+
+    1. **Infrastructure** -- PostgreSQL (per-service user model via Crunchy PGO)
+    2. **Core** -- Carbide API, DHCP, PXE, DNS, Vault, RLA, PSM
+    3. **REST** -- Temporal (via Helm), Keycloak (managed/external/disabled), REST API, workers, site-manager
+
+    ## TLS Backends
+
+    Two mTLS backends are supported:
+
+    * **SPIFFE/SPIRE** (default) -- Uses SPIRE CSI driver and spiffe-helper sidecars
+    * **cert-manager** -- Uses cert-manager Certificates and Issuer/ClusterIssuer
+
+    ## Managed Dependencies
+
+    Each dependency can be operator-managed or point to an external instance,
+    allowing flexible integration with existing infrastructure.
+  displayName: NVIDIA Bare Metal Manager Operator
+  icon:
+  - base64data: PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iIzc2YjkwMCI+PHBhdGggZD0iTTEyLjA0IDEuNjRjLTIuMjggMC00LjE0IDEuODUtNC4xNCA0LjE0IDAgMi4yOCAxLjg2IDQuMTQgNC4xNCA0LjE0IDIuMjkgMCA0LjE0LTEuODYgNC4xNC00LjE0IDAtMi4yOS0xLjg1LTQuMTQtNC4xNC00LjE0Wm0wIDYuNjJjLTEuMzcgMC0yLjQ4LTEuMTEtMi40OC0yLjQ4czEuMTEtMi40OCAyLjQ4LTIuNDggMi40OCAxLjExIDIuNDggMi40OC0xLjExIDIuNDgtMi40OCAyLjQ4Wk0yMC4yIDEzLjI5Yy0uNDktLjQ5LTEuMTUtLjc2LTEuODUtLjc2cy0xLjM2LjI3LTEuODUuNzZsLTIuNjcgMi42N2MtLjQ5LjQ5LS43NiAxLjE1LS43NiAxLjg1cy4yNyAxLjM2Ljc2IDEuODVsLjg4Ljg4Yy40OS40OSAxLjE1Ljc2IDEuODUuNzZzMS4zNi0uMjcgMS44NS0uNzZsMi42Ny0yLjY3Yy40OS0uNDkuNzYtMS4xNS43Ni0xLjg1cy0uMjctMS4zNi0uNzYtMS44NWwtLjg4LS44OFptLS4yOSAzLjQ0LTIuNjcgMi42N2MtLjE2LjE2LS4zNi4yNC0uNTguMjRzLS40My0uMDgtLjU5LS4yNGwtLjg4LS44OGMtLjE2LS4xNi0uMjQtLjM2LS4yNC0uNTlzLjA4LS40My4yNC0uNTlsMi42Ny0yLjY3Yy4xNi0uMTYuMzYtLjI0LjU5LS4yNHMuNDMuMDguNTkuMjRsLjg4Ljg4Yy4xNi4xNi4yNC4zNi4yNC41OXMtLjA4LjQzLS4yNC41OVpNNy43MiAxMy4yOWMtLjQ5LS40OS0xLjE1LS43Ni0xLjg1LS43NnMtMS4zNi4yNy0xLjg1Ljc2bC0uODguODhjLS40OS40OS0uNzYgMS4xNS0uNzYgMS44NXMuMjcgMS4zNi43NiAxLjg1bDIuNjcgMi42N2MuNDkuNDkgMS4xNS43NiAxLjg1Ljc2czEuMzYtLjI3IDEuODUtLjc2bC44OC0uODhjLjQ5LS40OS43Ni0xLjE1Ljc2LTEuODVzLS4yNy0xLjM2LS43Ni0xLjg1bC0yLjY3LTIuNjdabS0uMjkgNS41M2MtLjE2LjE2LS4zNi4yNC0uNTkuMjRzLS40My0uMDgtLjU5LS4yNEwzLjU5IDE2LjE1Yy0uMTYtLjE2LS4yNC0uMzYtLjI0LS41OXMuMDgtLjQzLjI0LS41OWwuODgtLjg4Yy4xNi0uMTYuMzYtLjI0LjU5LS4yNHMuNDMuMDguNTkuMjRsMi42NyAyLjY3Yy4xNi4xNi4yNC4zNi4yNC41OXMtLjA4LjQzLS4yNC41OWwtLjg4Ljg4WiIvPjwvc3ZnPg==
+    mediatype: image/svg+xml
+  install:
+    spec:
+      clusterPermissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          - persistentvolumeclaims
+          - secrets
+          - serviceaccounts
+          - services
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        - apiGroups:
+          - ""
+          resources:
+          - namespaces
+          verbs:
+          - create
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - pods
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - apiextensions.k8s.io
+          resources:
+          - customresourcedefinitions
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - apps
+          resources:
+          - daemonsets
+          - deployments
+          - statefulsets
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - batch
+          resources:
+          - jobs
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - carbide.nvidia.com
+          resources:
+          - carbidedeployments
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - carbide.nvidia.com
+          resources:
+          - carbidedeployments/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - carbide.nvidia.com
+          resources:
+          - carbidedeployments/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - cert-manager.io
+          resources:
+          - certificates
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - cert-manager.io
+          resources:
+          - clusterissuers
+          - issuers
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - k8s.keycloak.org
+          resources:
+          - keycloakrealmimports
+          - keycloaks
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - postgres-operator.crunchydata.com
+          resources:
+          - postgresclusters
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - rbac.authorization.k8s.io
+          resources:
+          - clusterrolebindings
+          - clusterroles
+          - rolebindings
+          - roles
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - update
+        - apiGroups:
+          - spire.spiffe.io
+          resources:
+          - clusterspiffeids
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - storage.k8s.io
+          resources:
+          - csidrivers
+          verbs:
+          - get
+          - list
+        - apiGroups:
+          - storage.k8s.io
+          resources:
+          - storageclasses
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - authentication.k8s.io
+          resources:
+          - tokenreviews
+          verbs:
+          - create
+        - apiGroups:
+          - authorization.k8s.io
+          resources:
+          - subjectaccessreviews
+          verbs:
+          - create
+        serviceAccountName: nvidia-carbide-operator-controller-manager
+      deployments:
+      - label:
+          app.kubernetes.io/managed-by: kustomize
+          app.kubernetes.io/name: nvidia-carbide-operator
+          control-plane: controller-manager
+        name: nvidia-carbide-operator-controller-manager
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app.kubernetes.io/name: nvidia-carbide-operator
+              control-plane: controller-manager
+          strategy: {}
+          template:
+            metadata:
+              annotations:
+                kubectl.kubernetes.io/default-container: manager
+              labels:
+                app.kubernetes.io/name: nvidia-carbide-operator
+                control-plane: controller-manager
+            spec:
+              containers:
+              - args:
+                - --metrics-bind-address=:8443
+                - --leader-elect
+                - --health-probe-bind-address=:8081
+                command:
+                - /manager
+                image: ghcr.io/nvidia/nvidia-carbide-operator:v0.1.0
+                livenessProbe:
+                  httpGet:
+                    path: /healthz
+                    port: 8081
+                  initialDelaySeconds: 15
+                  periodSeconds: 20
+                name: manager
+                readinessProbe:
+                  httpGet:
+                    path: /readyz
+                    port: 8081
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                resources:
+                  limits:
+                    cpu: 500m
+                    memory: 256Mi
+                  requests:
+                    cpu: 200m
+                    memory: 256Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                    - ALL
+                  readOnlyRootFilesystem: true
+              securityContext:
+                runAsNonRoot: true
+                seccompProfile:
+                  type: RuntimeDefault
+              serviceAccountName: nvidia-carbide-operator-controller-manager
+              terminationGracePeriodSeconds: 10
+      permissions:
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        serviceAccountName: nvidia-carbide-operator-controller-manager
+    strategy: deployment
+  installModes:
+  - supported: true
+    type: OwnNamespace
+  - supported: true
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - bare-metal
+  - provisioning
+  - nvidia
+  - pxe
+  - dhcp
+  - dns
+  - vault
+  - spiffe
+  links:
+  - name: Documentation
+    url: https://github.com/NVIDIA/bare-metal-manager-operator/blob/main/docs/
+  - name: Source Code
+    url: https://github.com/NVIDIA/bare-metal-manager-operator
+  maintainers:
+  - email: fdupont@nvidia.com
+    name: Fabien Dupont
+  maturity: alpha
+  minKubeVersion: 1.28.0
+  provider:
+    name: NVIDIA
+    url: https://www.nvidia.com
+  relatedImages:
+  - name: nvidia-carbide-operator
+    image: ghcr.io/nvidia/nvidia-carbide-operator:v0.1.0
+  version: 0.1.0

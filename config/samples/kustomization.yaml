@@ -1,0 +1,7 @@
+## Append samples of your project ##
+resources:
+- carbide_v1alpha1_carbidedeployment.yaml
+- carbide_v1alpha1_carbidedeployment_external.yaml
+- carbide_v1alpha1_carbidedeployment_full.yaml
+- carbide_v1alpha1_carbidedeployment_spoke.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples

@@ -1,0 +1,35 @@
+---
+schema: olm.package
+name: nvidia-carbide-operator
+defaultChannel: alpha
+description: "NVIDIA Bare Metal Manager Operator - deploys and manages bare metal provisioning infrastructure on OpenShift."
+icon:
+  base64data: PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iIzc2YjkwMCI+PHBhdGggZD0iTTEyLjA0IDEuNjRjLTIuMjggMC00LjE0IDEuODUtNC4xNCA0LjE0IDAgMi4yOCAxLjg2IDQuMTQgNC4xNCA0LjE0IDIuMjkgMCA0LjE0LTEuODYgNC4xNC00LjE0IDAtMi4yOS0xLjg1LTQuMTQtNC4xNC00LjE0Wm0wIDYuNjJjLTEuMzcgMC0yLjQ4LTEuMTEtMi40OC0yLjQ4czEuMTEtMi40OCAyLjQ4LTIuNDggMi40OCAxLjExIDIuNDggMi40OC0xLjExIDIuNDgtMi40OCAyLjQ4Wk0yMC4yIDEzLjI5Yy0uNDktLjQ5LTEuMTUtLjc2LTEuODUtLjc2cy0xLjM2LjI3LTEuODUuNzZsLTIuNjcgMi42N2MtLjQ5LjQ5LS43NiAxLjE1LS43NiAxLjg1cy4yNyAxLjM2Ljc2IDEuODVsLjg4Ljg4Yy40OS40OSAxLjE1Ljc2IDEuODUuNzZzMS4zNi0uMjcgMS44NS0uNzZsMi42Ny0yLjY3Yy40OS0uNDkuNzYtMS4xNS43Ni0xLjg1cy0uMjctMS4zNi0uNzYtMS44NWwtLjg4LS44OFptLS4yOSAzLjQ0LTIuNjcgMi42N2MtLjE2LjE2LS4zNi4yNC0uNTguMjRzLS40My0uMDgtLjU5LS4yNGwtLjg4LS44OGMtLjE2LS4xNi0uMjQtLjM2LS4yNC0uNTlzLjA4LS40My4yNC0uNTlsMi42Ny0yLjY3Yy4xNi0uMTYuMzYtLjI0LjU5LS4yNHMuNDMuMDguNTkuMjRsLjg4Ljg4Yy4xNi4xNi4yNC4zNi4yNC41OXMtLjA4LjQzLS4yNC41OVpNNy43MiAxMy4yOWMtLjQ5LS40OS0xLjE1LS43Ni0xLjg1LS43NnMtMS4zNi4yNy0xLjg1Ljc2bC0uODguODhjLS40OS40OS0uNzYgMS4xNS0uNzYgMS44NXMuMjcgMS4zNi43NiAxLjg1bDIuNjcgMi42N2MuNDkuNDkgMS4xNS43NiAxLjg1Ljc2czEuMzYtLjI3IDEuODUtLjc2bC44OC0uODhjLjQ5LS40OS43Ni0xLjE1Ljc2LTEuODVzLS4yNy0xLjM2LS43Ni0xLjg1bC0yLjY3LTIuNjdabS0uMjkgNS41M2MtLjE2LjE2LS4zNi4yNC0uNTkuMjRzLS40My0uMDgtLjU5LS4yNEwzLjU5IDE2LjE1Yy0uMTYtLjE2LS4yNC0uMzYtLjI0LS41OXMuMDgtLjQzLjI0LS41OWwuODgtLjg4Yy4xNi0uMTYuMzYtLjI0LjU5LS4yNHMuNDMuMDguNTkuMjRsMi42NyAyLjY3Yy4xNi4xNi4yNC4zNi4yNC41OXMtLjA4LjQzLS4yNC41OWwtLjg4Ljg4WiIvPjwvc3ZnPg==
+  mediatype: image/svg+xml
+---
+schema: olm.channel
+package: nvidia-carbide-operator
+name: alpha
+entries:
+  - name: nvidia-carbide-operator.v0.1.0
+---
+schema: olm.channel
+package: nvidia-carbide-operator
+name: stable
+entries:
+  - name: nvidia-carbide-operator.v0.1.0
+---
+schema: olm.bundle
+name: nvidia-carbide-operator.v0.1.0
+package: nvidia-carbide-operator
+image: ghcr.io/nvidia/nvidia-carbide-operator-bundle:v0.1.0
+properties:
+  - type: olm.gvk
+    value:
+      group: carbide.nvidia.com
+      kind: CarbideDeployment
+      version: v1alpha1
+  - type: olm.package
+    value:
+      packageName: nvidia-carbide-operator
+      version: 0.1.0
