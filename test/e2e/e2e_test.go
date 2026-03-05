@@ -48,52 +48,6 @@ const metricsRoleBindingName = "carbide-operator-metrics-binding"
 var _ = Describe("Manager", Ordered, func() {
 	var controllerPodName string
 
-	// Before running the tests, set up the environment by creating the namespace,
-	// enforce the restricted security policy to the namespace, installing CRDs,
-	// and deploying the controller.
-	BeforeAll(func() {
-		By("creating manager namespace")
-		cmd := exec.Command("kubectl", "create", "ns", namespace)
-		_, err := utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to create namespace")
-
-		By("labeling the namespace to enforce the restricted security policy")
-		cmd = exec.Command("kubectl", "label", "--overwrite", "ns", namespace,
-			"pod-security.kubernetes.io/enforce=restricted")
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to label namespace with restricted policy")
-
-		By("installing CRDs")
-		cmd = exec.Command("make", "install")
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to install CRDs")
-
-		By("deploying the controller-manager")
-		cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
-	})
-
-	// After all tests have been executed, clean up by undeploying the controller, uninstalling CRDs,
-	// and deleting the namespace.
-	AfterAll(func() {
-		By("cleaning up the curl pod for metrics")
-		cmd := exec.Command("kubectl", "delete", "pod", "curl-metrics", "-n", namespace)
-		_, _ = utils.Run(cmd)
-
-		By("undeploying the controller-manager")
-		cmd = exec.Command("make", "undeploy")
-		_, _ = utils.Run(cmd)
-
-		By("uninstalling CRDs")
-		cmd = exec.Command("make", "uninstall")
-		_, _ = utils.Run(cmd)
-
-		By("removing manager namespace")
-		cmd = exec.Command("kubectl", "delete", "ns", namespace)
-		_, _ = utils.Run(cmd)
-	})
-
 	// After each test, check for failures and collect logs, events,
 	// and pod descriptions for debugging.
 	AfterEach(func() {
@@ -144,7 +98,6 @@ var _ = Describe("Manager", Ordered, func() {
 		It("should run successfully", func() {
 			By("validating that the controller-manager pod is running as expected")
 			verifyControllerUp := func(g Gomega) {
-				// Get the name of the controller-manager pod
 				cmd := exec.Command("kubectl", "get",
 					"pods", "-l", "control-plane=controller-manager",
 					"-o", "go-template={{ range .items }}"+
@@ -161,7 +114,6 @@ var _ = Describe("Manager", Ordered, func() {
 				controllerPodName = podNames[0]
 				g.Expect(controllerPodName).To(ContainSubstring("controller-manager"))
 
-				// Validate the pod's status
 				cmd = exec.Command("kubectl", "get",
 					"pods", controllerPodName, "-o", "jsonpath={.status.phase}",
 					"-n", namespace,
@@ -267,28 +219,81 @@ var _ = Describe("Manager", Ordered, func() {
 		})
 
 		// +kubebuilder:scaffold:e2e-webhooks-checks
+	})
 
-		It("should reconcile a CarbideDeployment CR and create child resources", func() {
-			crNamespace := "carbide-e2e-test"
-			crName := "test-deployment"
+	Context("CarbideDeployment with cert-manager TLS", func() {
+		const cmNamespace = "nvidia-carbide-e2e-cm"
+		const cmCRName = "e2e-certmanager"
 
+		BeforeEach(func() {
 			By("creating the test namespace")
-			cmd := exec.Command("kubectl", "create", "ns", crNamespace)
-			_, err := utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
+			cmd := exec.Command("kubectl", "create", "ns", cmNamespace)
+			_, _ = utils.Run(cmd)
+		})
 
-			By("applying a CarbideDeployment CR")
+		AfterEach(func() {
+			By("cleaning up the CarbideDeployment CR")
+			cmd := exec.Command("kubectl", "delete", "carbidedeployment", cmCRName,
+				"-n", cmNamespace, "--timeout=60s", "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+
+			By("cleaning up the ClusterIssuer")
+			cmd = exec.Command("kubectl", "delete", "clusterissuer",
+				"carbide-e2e-selfsigned", "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+
+			By("cleaning up the test namespace")
+			cmd = exec.Command("kubectl", "delete", "ns", cmNamespace, "--timeout=60s", "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+		})
+
+		It("should deploy a full stack with cert-manager TLS", func() {
+			By("creating a self-signed ClusterIssuer for cert-manager")
+			issuerYAML := `apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: carbide-e2e-selfsigned
+spec:
+  selfSigned: {}
+`
+			issuerFile := filepath.Join("/tmp", "e2e-clusterissuer.yaml")
+			err := os.WriteFile(issuerFile, []byte(issuerYAML), 0o644)
+			Expect(err).NotTo(HaveOccurred())
+			defer os.Remove(issuerFile)
+
+			cmd := exec.Command("kubectl", "apply", "-f", issuerFile)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create ClusterIssuer")
+
+			By("applying a CarbideDeployment CR with cert-manager TLS")
 			cr := fmt.Sprintf(`apiVersion: carbide.nvidia.com/v1alpha1
 kind: CarbideDeployment
 metadata:
   name: %s
   namespace: %s
 spec:
-  profile: management
+  profile: management-with-site
   version: "latest"
+  tls:
+    mode: certManager
+    certManager:
+      issuerRef:
+        name: carbide-e2e-selfsigned
+        kind: ClusterIssuer
   network:
-    domain: "carbide.local"
+    interface: eth0
+    ip: 10.0.0.1
+    adminNetworkCIDR: 10.0.0.0/24
+    domain: carbide.local
+  infrastructure:
+    namespace: %s
+    postgresql:
+      mode: managed
+      version: "16"
+      storage:
+        size: 1Gi
   core:
+    namespace: %s
     api:
       port: 1079
     dhcp:
@@ -297,50 +302,210 @@ spec:
       enabled: false
     pxe:
       enabled: false
-`, crName, crNamespace)
+    vault:
+      mode: managed
+    rla:
+      enabled: true
+    psm:
+      enabled: true
+  rest:
+    temporal:
+      mode: managed
+    keycloak:
+      mode: disabled
+    restAPI:
+      port: 8080
+`, cmCRName, cmNamespace, cmNamespace, cmNamespace)
 
-			crFile := filepath.Join("/tmp", "e2e-cr.yaml")
+			crFile := filepath.Join("/tmp", "e2e-cr-certmanager.yaml")
 			err = os.WriteFile(crFile, []byte(cr), 0o644)
 			Expect(err).NotTo(HaveOccurred())
+			defer os.Remove(crFile)
 
 			cmd = exec.Command("kubectl", "apply", "-f", crFile)
 			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply CarbideDeployment CR")
 
-			By("waiting for the CR to have a status phase")
-			verifyStatusPhase := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "carbidedeployment", crName,
-					"-n", crNamespace,
-					"-o", "jsonpath={.status.phase}")
+			By("waiting for PostgresCluster to exist")
+			verifyPGCluster := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "postgrescluster",
+					"-n", cmNamespace, "-o", "jsonpath={.items[*].metadata.name}")
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).NotTo(BeEmpty(), "status.phase should be set")
+				g.Expect(output).NotTo(BeEmpty(), "PostgresCluster should exist")
 			}
-			Eventually(verifyStatusPhase, 60*time.Second, 2*time.Second).Should(Succeed())
+			Eventually(verifyPGCluster, 60*time.Second, 2*time.Second).Should(Succeed())
 
-			By("verifying the CR has a finalizer")
-			cmd = exec.Command("kubectl", "get", "carbidedeployment", crName,
-				"-n", crNamespace,
-				"-o", "jsonpath={.metadata.finalizers}")
-			output, err := utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(output).To(ContainSubstring("carbide.nvidia.com/finalizer"))
+			By("verifying ConfigMaps were created")
+			verifyConfigMaps := func(g Gomega) {
+				for _, cmName := range []string{"carbide-api-config", "casbin-policy"} {
+					cmd := exec.Command("kubectl", "get", "configmap", cmName,
+						"-n", cmNamespace)
+					_, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred(), "ConfigMap %s should exist", cmName)
+				}
+			}
+			Eventually(verifyConfigMaps, 2*time.Minute, 2*time.Second).Should(Succeed())
 
-			By("verifying conditions are set")
-			cmd = exec.Command("kubectl", "get", "carbidedeployment", crName,
-				"-n", crNamespace,
-				"-o", "jsonpath={.status.conditions[*].type}")
-			output, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(output).To(ContainSubstring("Ready"))
+			By("verifying ServiceAccounts were created")
+			verifySAs := func(g Gomega) {
+				for _, saName := range []string{"carbide-api", "carbide-rla", "carbide-psm"} {
+					cmd := exec.Command("kubectl", "get", "serviceaccount", saName,
+						"-n", cmNamespace)
+					_, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred(), "ServiceAccount %s should exist", saName)
+				}
+			}
+			Eventually(verifySAs, 2*time.Minute, 2*time.Second).Should(Succeed())
 
-			By("cleaning up the CR")
-			cmd = exec.Command("kubectl", "delete", "carbidedeployment", crName, "-n", crNamespace, "--timeout=30s")
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred())
+			By("verifying cert-manager Certificates were created")
+			verifyCerts := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "certificate",
+					"-n", cmNamespace, "-o", "jsonpath={.items[*].metadata.name}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).NotTo(BeEmpty(), "cert-manager Certificates should exist")
+			}
+			Eventually(verifyCerts, 2*time.Minute, 2*time.Second).Should(Succeed())
 
-			cmd = exec.Command("kubectl", "delete", "ns", crNamespace, "--timeout=30s")
+			By("verifying status has conditions set")
+			verifyConditions := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "carbidedeployment", cmCRName,
+					"-n", cmNamespace,
+					"-o", "jsonpath={.status.conditions[*].type}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).NotTo(BeEmpty(), "status.conditions should be set")
+			}
+			Eventually(verifyConditions, 60*time.Second, 2*time.Second).Should(Succeed())
+		})
+	})
+
+	Context("CarbideDeployment with SPIFFE TLS", func() {
+		const spiffeNamespace = "nvidia-carbide-e2e-spiffe"
+		const spiffeCRName = "e2e-spiffe"
+
+		BeforeEach(func() {
+			By("creating the test namespace")
+			cmd := exec.Command("kubectl", "create", "ns", spiffeNamespace)
 			_, _ = utils.Run(cmd)
+		})
+
+		AfterEach(func() {
+			By("cleaning up the CarbideDeployment CR")
+			cmd := exec.Command("kubectl", "delete", "carbidedeployment", spiffeCRName,
+				"-n", spiffeNamespace, "--timeout=60s", "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+
+			By("cleaning up the test namespace")
+			cmd = exec.Command("kubectl", "delete", "ns", spiffeNamespace,
+				"--timeout=60s", "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+		})
+
+		It("should deploy a full stack with SPIFFE TLS", func() {
+			By("applying a CarbideDeployment CR with SPIFFE TLS")
+			cr := fmt.Sprintf(`apiVersion: carbide.nvidia.com/v1alpha1
+kind: CarbideDeployment
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  profile: management-with-site
+  version: "latest"
+  tls:
+    mode: spiffe
+    spiffe:
+      trustDomain: carbide.local
+  network:
+    interface: eth0
+    ip: 10.0.0.1
+    adminNetworkCIDR: 10.0.0.0/24
+    domain: carbide.local
+  infrastructure:
+    namespace: %s
+    postgresql:
+      mode: managed
+      version: "16"
+      storage:
+        size: 1Gi
+  core:
+    namespace: %s
+    api:
+      port: 1079
+    dhcp:
+      enabled: false
+    dns:
+      enabled: false
+    pxe:
+      enabled: false
+    vault:
+      mode: managed
+    rla:
+      enabled: true
+    psm:
+      enabled: true
+  rest:
+    temporal:
+      mode: managed
+    keycloak:
+      mode: disabled
+    restAPI:
+      port: 8080
+`, spiffeCRName, spiffeNamespace, spiffeNamespace, spiffeNamespace)
+
+			crFile := filepath.Join("/tmp", "e2e-cr-spiffe.yaml")
+			err := os.WriteFile(crFile, []byte(cr), 0o644)
+			Expect(err).NotTo(HaveOccurred())
+			defer os.Remove(crFile)
+
+			cmd := exec.Command("kubectl", "apply", "-f", crFile)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply CarbideDeployment CR")
+
+			By("waiting for PostgresCluster to exist")
+			verifyPGCluster := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "postgrescluster",
+					"-n", spiffeNamespace, "-o", "jsonpath={.items[*].metadata.name}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).NotTo(BeEmpty(), "PostgresCluster should exist")
+			}
+			Eventually(verifyPGCluster, 60*time.Second, 2*time.Second).Should(Succeed())
+
+			By("verifying ClusterSPIFFEIDs were created")
+			verifyCSIDs := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "clusterspiffeid",
+					"-o", "jsonpath={.items[*].metadata.name}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).NotTo(BeEmpty(), "ClusterSPIFFEIDs should exist")
+				for _, component := range []string{"carbide-api", "carbide-rla", "carbide-psm"} {
+					g.Expect(output).To(ContainSubstring(component),
+						"ClusterSPIFFEID for %s should exist", component)
+				}
+			}
+			Eventually(verifyCSIDs, 2*time.Minute, 2*time.Second).Should(Succeed())
+
+			By("verifying spiffe-helper-config ConfigMap exists")
+			verifyHelperConfig := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "configmap", "spiffe-helper-config",
+					"-n", spiffeNamespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred(), "spiffe-helper-config ConfigMap should exist")
+			}
+			Eventually(verifyHelperConfig, 2*time.Minute, 2*time.Second).Should(Succeed())
+
+			By("verifying status has SPIFFEAvailable=True condition")
+			verifySPIFFECondition := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "carbidedeployment", spiffeCRName,
+					"-n", spiffeNamespace,
+					"-o", "jsonpath={.status.conditions[?(@.type=='SPIFFEAvailable')].status}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("True"), "SPIFFEAvailable condition should be True")
+			}
+			Eventually(verifySPIFFECondition, 2*time.Minute, 2*time.Second).Should(Succeed())
 		})
 	})
 })

@@ -33,23 +33,21 @@ import (
 
 var (
 	// Optional Environment Variables:
-	// - CERT_MANAGER_INSTALL_SKIP=true: Skips CertManager installation during test setup.
-	// These variables are useful if CertManager is already installed, avoiding
-	// re-installation and conflicts.
+	// - CERT_MANAGER_INSTALL_SKIP=true: Skips cert-manager installation during test setup.
+	// - SPIRE_INSTALL_SKIP=true: Skips SPIRE installation during test setup.
+	// These variables are useful when running against a cluster that already has these installed.
 	skipCertManagerInstall = os.Getenv("CERT_MANAGER_INSTALL_SKIP") == "true"
-	// isCertManagerAlreadyInstalled will be set true when CertManager CRDs be found on the cluster
-	isCertManagerAlreadyInstalled = false
+	skipSpireInstall       = os.Getenv("SPIRE_INSTALL_SKIP") == "true"
 
 	// projectImage is the name of the image which will be built and loaded
 	// with the code source changes to be tested.
-	// Override with IMG env var in CI (e.g. IMG=localhost/nvidia-carbide-operator:e2e).
 	projectImage = getEnvOrDefault("IMG", "localhost/nvidia-carbide-operator:e2e")
 )
 
 // TestE2E runs the end-to-end (e2e) test suite for the project. These tests execute in an isolated,
 // temporary environment to validate project changes with the purpose of being used in CI jobs.
 // The default setup requires Kind, builds/loads the Manager Docker image locally, and installs
-// CertManager.
+// prerequisites (PGO, cert-manager, SPIRE).
 func TestE2E(t *testing.T) {
 	RegisterFailHandler(Fail)
 	_, _ = fmt.Fprintf(GinkgoWriter, "Starting carbide-operator integration test suite\n")
@@ -58,7 +56,6 @@ func TestE2E(t *testing.T) {
 
 var _ = BeforeSuite(func() {
 	By("building the manager(Operator) image")
-	// Use Dockerfile.ci for CI builds (no Red Hat subscription needed for UBI-STIG).
 	dockerfile := getEnvOrDefault("DOCKERFILE", "Dockerfile.ci")
 	cmd := exec.Command("make", "docker-build",
 		fmt.Sprintf("IMG=%s", projectImage),
@@ -66,26 +63,69 @@ var _ = BeforeSuite(func() {
 	_, err := utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the manager(Operator) image")
 
-	// TODO(user): If you want to change the e2e test vendor from Kind, ensure the image is
-	// built and available before running the tests. Also, remove the following block.
 	By("loading the manager(Operator) image on Kind")
 	err = utils.LoadImageToKindClusterWithName(projectImage)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the manager(Operator) image into Kind")
 
-	// The tests-e2e are intended to run on a temporary cluster that is created and destroyed for testing.
-	// To prevent errors when tests run in environments with CertManager already installed,
-	// we check for its presence before execution.
-	// Setup CertManager before the suite if not skipped and if not already installed
+	By("installing PGO (Crunchy PostgreSQL Operator)")
+	cmd = exec.Command("kubectl", "apply", "-k",
+		"https://github.com/CrunchyData/postgres-operator-examples/kustomize/install/default")
+	_, err = utils.Run(cmd)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to install PGO")
+
 	if !skipCertManagerInstall {
-		By("checking if cert manager is installed already")
-		isCertManagerAlreadyInstalled = utils.IsCertManagerCRDsInstalled()
-		if !isCertManagerAlreadyInstalled {
-			_, _ = fmt.Fprintf(GinkgoWriter, "Installing CertManager...\n")
-			Expect(utils.InstallCertManager()).To(Succeed(), "Failed to install CertManager")
-		} else {
-			_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: CertManager is already installed. Skipping installation...\n")
-		}
+		By("installing cert-manager")
+		cmd = exec.Command("kubectl", "apply", "-f",
+			"https://github.com/cert-manager/cert-manager/releases/download/v1.17.2/cert-manager.yaml")
+		_, err = utils.Run(cmd)
+		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to install cert-manager")
+
+		By("waiting for cert-manager webhook to be ready")
+		cmd = exec.Command("kubectl", "wait", "--for=condition=Available",
+			"deployment/cert-manager-webhook", "-n", "cert-manager", "--timeout=120s")
+		_, err = utils.Run(cmd)
+		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "cert-manager webhook did not become ready in time")
 	}
+
+	if !skipSpireInstall {
+		By("installing SPIRE")
+		cmd = exec.Command("helm", "repo", "add", "spiffe",
+			"https://spiffe.github.io/helm-charts-hardened/")
+		_, err = utils.Run(cmd)
+		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to add spiffe helm repo")
+
+		cmd = exec.Command("helm", "install", "spire", "spiffe/spire",
+			"-n", "spire", "--create-namespace", "--wait", "--timeout", "5m")
+		_, err = utils.Run(cmd)
+		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to install SPIRE")
+	}
+
+	By("installing CRDs")
+	cmd = exec.Command("make", "install")
+	_, err = utils.Run(cmd)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to install CRDs")
+
+	By("deploying the controller-manager")
+	cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
+	_, err = utils.Run(cmd)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
+
+	By("waiting for the controller-manager pod to be ready")
+	cmd = exec.Command("kubectl", "wait", "--for=condition=Available",
+		"deployment/carbide-operator-controller-manager",
+		"-n", "carbide-operator-system", "--timeout=120s")
+	_, err = utils.Run(cmd)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Controller manager did not become ready in time")
+})
+
+var _ = AfterSuite(func() {
+	By("undeploying the controller-manager")
+	cmd := exec.Command("make", "undeploy")
+	_, _ = utils.Run(cmd)
+
+	By("uninstalling CRDs")
+	cmd = exec.Command("make", "uninstall")
+	_, _ = utils.Run(cmd)
 })
 
 func getEnvOrDefault(key, defaultValue string) string {
@@ -94,11 +134,3 @@ func getEnvOrDefault(key, defaultValue string) string {
 	}
 	return defaultValue
 }
-
-var _ = AfterSuite(func() {
-	// Teardown CertManager after the suite if not skipped and if it was not already installed
-	if !skipCertManagerInstall && !isCertManagerAlreadyInstalled {
-		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling CertManager...\n")
-		utils.UninstallCertManager()
-	}
-})
