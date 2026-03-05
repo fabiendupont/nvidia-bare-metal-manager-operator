@@ -179,14 +179,21 @@ spec:
 	}
 
 	if !skipSpireInstall {
-		By("installing SPIRE")
+		By("installing SPIRE CRDs and server")
 		cmd = exec.Command("helm", "repo", "add", "spiffe",
 			"https://spiffe.github.io/helm-charts-hardened/")
-		_, err = utils.Run(cmd)
-		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to add spiffe helm repo")
+		_, _ = utils.Run(cmd) // ignore if already added
 
+		cmd = exec.Command("helm", "repo", "update")
+		_, _ = utils.Run(cmd)
+
+		// Install SPIRE with CRDs enabled and skip ClusterSPIFFEID resources
+		// that require the controller-manager to be running first
 		cmd = exec.Command("helm", "install", "spire", "spiffe/spire",
-			"-n", "spire", "--create-namespace", "--wait", "--timeout", "5m")
+			"-n", "spire", "--create-namespace",
+			"--set", "spire-crds.enabled=true",
+			"--set", "spire-server.controllerManager.enabled=false",
+			"--wait", "--timeout", "5m")
 		_, err = utils.Run(cmd)
 		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to install SPIRE")
 	}
