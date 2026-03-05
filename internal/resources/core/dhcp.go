@@ -27,7 +27,7 @@ import (
 
 	carbitev1alpha1 "github.com/NVIDIA/bare-metal-manager-operator/api/v1alpha1"
 	"github.com/NVIDIA/bare-metal-manager-operator/internal/resources"
-	"github.com/NVIDIA/bare-metal-manager-operator/internal/resources/spiffe"
+	"github.com/NVIDIA/bare-metal-manager-operator/internal/resources/tls"
 )
 
 const (
@@ -84,9 +84,8 @@ func BuildDHCPDaemonSet(deployment *carbitev1alpha1.CarbideDeployment, namespace
 	var volumeMounts []corev1.VolumeMount
 
 	// Add SPIFFE cert env vars and mount
-	if spiffe.IsEnabled(deployment) {
-		env = append(env, spiffe.SpiffeCertEnvVars()...)
-		volumeMounts = append(volumeMounts, spiffe.SpiffeCertVolumeMount())
+	if tls.IsEnabled(deployment) {
+		env = append(env, tls.CertEnvVars()...)
 	}
 
 	podSpec := corev1.PodSpec{
@@ -123,7 +122,7 @@ func BuildDHCPDaemonSet(deployment *carbitev1alpha1.CarbideDeployment, namespace
 	}
 
 	// Inject SPIFFE
-	spiffe.InjectSpiffe(&podSpec, deployment)
+	tls.InjectTLS(&podSpec, deployment)
 
 	return &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{

@@ -127,7 +127,8 @@ func InjectCertManager(podSpec *corev1.PodSpec, deployment *carbitev1alpha1.Carb
 		},
 	})
 
-	// Add cert mount to all containers
+	// Add cert mount to all app containers (init containers get it too
+	// if they need TLS — builders add it explicitly where needed)
 	certMount := corev1.VolumeMount{
 		Name:      "tls-certs",
 		MountPath: CertDir,

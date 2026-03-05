@@ -27,7 +27,7 @@ import (
 
 	carbitev1alpha1 "github.com/NVIDIA/bare-metal-manager-operator/api/v1alpha1"
 	"github.com/NVIDIA/bare-metal-manager-operator/internal/resources"
-	"github.com/NVIDIA/bare-metal-manager-operator/internal/resources/spiffe"
+	"github.com/NVIDIA/bare-metal-manager-operator/internal/resources/tls"
 )
 
 const (
@@ -63,8 +63,8 @@ db:
     caPath: %s/ca.crt
     certPath: %s/tls.crt
     keyPath: %s/tls.key
-`, spiffe.CertDir, spiffe.CertDir, spiffe.CertDir,
-		spiffe.CertDir, spiffe.CertDir, spiffe.CertDir)
+`, tls.CertDir, tls.CertDir, tls.CertDir,
+		tls.CertDir, tls.CertDir, tls.CertDir)
 
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -154,10 +154,6 @@ func buildWorkerDeployment(deployment *carbitev1alpha1.CarbideDeployment, namesp
 		},
 	}
 
-	if spiffe.IsEnabled(deployment) {
-		volumeMounts = append(volumeMounts, spiffe.SpiffeCertVolumeMount())
-	}
-
 	env := []corev1.EnvVar{
 		{Name: "CONFIG_FILE_PATH", Value: "/app/config.yaml"},
 		{Name: "TEMPORAL_NAMESPACE", Value: temporalNamespace},
@@ -197,7 +193,7 @@ func buildWorkerDeployment(deployment *carbitev1alpha1.CarbideDeployment, namesp
 		Volumes: volumes,
 	}
 
-	spiffe.InjectSpiffe(&podSpec, deployment)
+	tls.InjectTLS(&podSpec, deployment)
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{

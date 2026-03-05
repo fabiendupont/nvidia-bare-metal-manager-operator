@@ -26,7 +26,7 @@ import (
 
 	carbitev1alpha1 "github.com/NVIDIA/bare-metal-manager-operator/api/v1alpha1"
 	"github.com/NVIDIA/bare-metal-manager-operator/internal/resources"
-	"github.com/NVIDIA/bare-metal-manager-operator/internal/resources/spiffe"
+	"github.com/NVIDIA/bare-metal-manager-operator/internal/resources/tls"
 )
 
 const (
@@ -55,7 +55,7 @@ func BuildSiteAgentConfigMap(deployment *carbitev1alpha1.CarbideDeployment, name
 		"TEMPORAL_PORT":              "7233",
 		"TEMPORAL_PUBLISH_NAMESPACE": "site",
 		"ENABLE_TLS":                 "true",
-		"TEMPORAL_CERT_PATH":         spiffe.CertDir,
+		"TEMPORAL_CERT_PATH":         tls.CertDir,
 	}
 
 	if hubEndpoint != "" {
@@ -63,10 +63,10 @@ func BuildSiteAgentConfigMap(deployment *carbitev1alpha1.CarbideDeployment, name
 	}
 
 	// Add SPIFFE cert paths
-	if spiffe.IsEnabled(deployment) {
-		data["CARBIDE_CA_CERT_PATH"] = spiffe.CertDir + "/ca.crt"
-		data["CARBIDE_CLIENT_CERT_PATH"] = spiffe.CertDir + "/tls.crt"
-		data["CARBIDE_CLIENT_KEY_PATH"] = spiffe.CertDir + "/tls.key"
+	if tls.IsEnabled(deployment) {
+		data["CARBIDE_CA_CERT_PATH"] = tls.CertDir + "/ca.crt"
+		data["CARBIDE_CLIENT_CERT_PATH"] = tls.CertDir + "/tls.crt"
+		data["CARBIDE_CLIENT_KEY_PATH"] = tls.CertDir + "/tls.key"
 	}
 
 	return &corev1.ConfigMap{
@@ -100,9 +100,6 @@ func BuildSiteAgentDeployment(deployment *carbitev1alpha1.CarbideDeployment, nam
 	replicas := int32(1)
 
 	var volumeMounts []corev1.VolumeMount
-	if spiffe.IsEnabled(deployment) {
-		volumeMounts = append(volumeMounts, spiffe.SpiffeCertVolumeMount())
-	}
 
 	podSpec := corev1.PodSpec{
 		ServiceAccountName: SiteAgentName,
@@ -125,7 +122,7 @@ func BuildSiteAgentDeployment(deployment *carbitev1alpha1.CarbideDeployment, nam
 		},
 	}
 
-	spiffe.InjectSpiffe(&podSpec, deployment)
+	tls.InjectTLS(&podSpec, deployment)
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{

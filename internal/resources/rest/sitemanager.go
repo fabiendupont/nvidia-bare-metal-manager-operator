@@ -28,7 +28,7 @@ import (
 
 	carbitev1alpha1 "github.com/NVIDIA/bare-metal-manager-operator/api/v1alpha1"
 	"github.com/NVIDIA/bare-metal-manager-operator/internal/resources"
-	"github.com/NVIDIA/bare-metal-manager-operator/internal/resources/spiffe"
+	"github.com/NVIDIA/bare-metal-manager-operator/internal/resources/tls"
 )
 
 const (
@@ -68,12 +68,11 @@ func BuildSiteManagerDeployment(deployment *carbitev1alpha1.CarbideDeployment, n
 	var args []string
 	var volumeMounts []corev1.VolumeMount
 
-	if spiffe.IsEnabled(deployment) {
+	if tls.IsEnabled(deployment) {
 		args = append(args,
-			"--tls-cert-path", spiffe.CertDir+"/tls.crt",
-			"--tls-key-path", spiffe.CertDir+"/tls.key",
+			"--tls-cert-path", tls.CertDir+"/tls.crt",
+			"--tls-key-path", tls.CertDir+"/tls.key",
 		)
-		volumeMounts = append(volumeMounts, spiffe.SpiffeCertVolumeMount())
 	}
 
 	container := corev1.Container{
@@ -117,7 +116,7 @@ func BuildSiteManagerDeployment(deployment *carbitev1alpha1.CarbideDeployment, n
 		Containers:         []corev1.Container{container},
 	}
 
-	spiffe.InjectSpiffe(&podSpec, deployment)
+	tls.InjectTLS(&podSpec, deployment)
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{

@@ -112,9 +112,6 @@ func BuildPSMDeployment(deployment *carbitev1alpha1.CarbideDeployment, namespace
 	volumeMounts := []corev1.VolumeMount{
 		{Name: "db-certs", MountPath: "/var/run/secrets/db", ReadOnly: true},
 	}
-	if tls.IsEnabled(deployment) {
-		volumeMounts = append(volumeMounts, tls.CertVolumeMount())
-	}
 
 	volumes := []corev1.Volume{
 		{

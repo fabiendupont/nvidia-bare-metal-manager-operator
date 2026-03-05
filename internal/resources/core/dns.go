@@ -27,7 +27,7 @@ import (
 
 	carbitev1alpha1 "github.com/NVIDIA/bare-metal-manager-operator/api/v1alpha1"
 	"github.com/NVIDIA/bare-metal-manager-operator/internal/resources"
-	"github.com/NVIDIA/bare-metal-manager-operator/internal/resources/spiffe"
+	"github.com/NVIDIA/bare-metal-manager-operator/internal/resources/tls"
 )
 
 const (
@@ -59,7 +59,7 @@ client_cert_path = "%s/tls.crt"
 client_key_path = "%s/tls.key"
 `,
 		apiPort, legacyListen,
-		spiffe.CertDir, spiffe.CertDir, spiffe.CertDir,
+		tls.CertDir, tls.CertDir, tls.CertDir,
 	)
 
 	return &corev1.ConfigMap{
@@ -134,11 +134,6 @@ func BuildDNSDaemonSet(deployment *carbitev1alpha1.CarbideDeployment, namespace 
 		},
 	}
 
-	// Add SPIFFE cert mount for app container
-	if spiffe.IsEnabled(deployment) {
-		volumeMounts = append(volumeMounts, spiffe.SpiffeCertVolumeMount())
-	}
-
 	podSpec := corev1.PodSpec{
 		ServiceAccountName: DNSName,
 		HostNetwork:        true,
@@ -184,7 +179,7 @@ func BuildDNSDaemonSet(deployment *carbitev1alpha1.CarbideDeployment, namespace 
 	}
 
 	// Inject SPIFFE
-	spiffe.InjectSpiffe(&podSpec, deployment)
+	tls.InjectTLS(&podSpec, deployment)
 
 	return &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{

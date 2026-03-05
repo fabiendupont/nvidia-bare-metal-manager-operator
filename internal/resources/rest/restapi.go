@@ -28,7 +28,7 @@ import (
 
 	carbitev1alpha1 "github.com/NVIDIA/bare-metal-manager-operator/api/v1alpha1"
 	"github.com/NVIDIA/bare-metal-manager-operator/internal/resources"
-	"github.com/NVIDIA/bare-metal-manager-operator/internal/resources/spiffe"
+	"github.com/NVIDIA/bare-metal-manager-operator/internal/resources/tls"
 )
 
 const (
@@ -69,8 +69,8 @@ auth:
 siteManager:
   endpoint: http://site-manager.%s.svc:8080
 `,
-		spiffe.CertDir, spiffe.CertDir, spiffe.CertDir,
-		spiffe.CertDir, spiffe.CertDir, spiffe.CertDir,
+		tls.CertDir, tls.CertDir, tls.CertDir,
+		tls.CertDir, tls.CertDir, tls.CertDir,
 		keycloakURL, keycloakConfig.Realm,
 		namespace,
 	)
@@ -154,10 +154,6 @@ func BuildRestAPIDeployment(deployment *carbitev1alpha1.CarbideDeployment, names
 		},
 	}
 
-	if spiffe.IsEnabled(deployment) {
-		volumeMounts = append(volumeMounts, spiffe.SpiffeCertVolumeMount())
-	}
-
 	env := []corev1.EnvVar{
 		{Name: "CONFIG_FILE_PATH", Value: "/app/config.yaml"},
 		{
@@ -237,7 +233,7 @@ func BuildRestAPIDeployment(deployment *carbitev1alpha1.CarbideDeployment, names
 		Volumes: volumes,
 	}
 
-	spiffe.InjectSpiffe(&podSpec, deployment)
+	tls.InjectTLS(&podSpec, deployment)
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{

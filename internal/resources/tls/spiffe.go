@@ -266,6 +266,19 @@ func InjectSpiffe(podSpec *corev1.PodSpec, deployment *carbitev1alpha1.CarbideDe
 	// Append sidecar
 	podSpec.Containers = append(podSpec.Containers, SpiffeSidecarContainer(helperImage))
 
+	// Add cert mount to app containers (not the sidecar we just added)
+	certMount := corev1.VolumeMount{
+		Name:      "tls-certs",
+		MountPath: CertDir,
+		ReadOnly:  true,
+	}
+	for i := range podSpec.Containers {
+		if podSpec.Containers[i].Name == "spiffe-helper" {
+			continue // sidecar already has its own mount
+		}
+		podSpec.Containers[i].VolumeMounts = append(podSpec.Containers[i].VolumeMounts, certMount)
+	}
+
 	// Append volumes
 	podSpec.Volumes = append(podSpec.Volumes, SpiffeVolumes()...)
 }
