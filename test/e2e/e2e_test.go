@@ -268,15 +268,82 @@ var _ = Describe("Manager", Ordered, func() {
 
 		// +kubebuilder:scaffold:e2e-webhooks-checks
 
-		// TODO: Customize the e2e test suite with scenarios specific to your project.
-		// Consider applying sample/CR(s) and check their status and/or verifying
-		// the reconciliation by using the metrics, i.e.:
-		// metricsOutput, err := getMetricsOutput()
-		// Expect(err).NotTo(HaveOccurred(), "Failed to retrieve logs from curl pod")
-		// Expect(metricsOutput).To(ContainSubstring(
-		//    fmt.Sprintf(`controller_runtime_reconcile_total{controller="%s",result="success"} 1`,
-		//    strings.ToLower(<Kind>),
-		// ))
+		It("should reconcile a CarbideDeployment CR and create child resources", func() {
+			crNamespace := "carbide-e2e-test"
+			crName := "test-deployment"
+
+			By("creating the test namespace")
+			cmd := exec.Command("kubectl", "create", "ns", crNamespace)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("applying a CarbideDeployment CR")
+			cr := fmt.Sprintf(`apiVersion: carbide.nvidia.com/v1alpha1
+kind: CarbideDeployment
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  profile: management
+  version: "latest"
+  network:
+    domain: "carbide.local"
+  core:
+    api:
+      port: 1079
+  rest:
+    enabled: true
+    temporal:
+      mode: managed
+    keycloak:
+      mode: disabled
+    restAPI:
+      port: 8080
+`, crName, crNamespace)
+
+			crFile := filepath.Join("/tmp", "e2e-cr.yaml")
+			err = os.WriteFile(crFile, []byte(cr), 0o644)
+			Expect(err).NotTo(HaveOccurred())
+
+			cmd = exec.Command("kubectl", "apply", "-f", crFile)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("waiting for the CR to have a status phase")
+			verifyStatusPhase := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "carbidedeployment", crName,
+					"-n", crNamespace,
+					"-o", "jsonpath={.status.phase}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).NotTo(BeEmpty(), "status.phase should be set")
+			}
+			Eventually(verifyStatusPhase, 60*time.Second, 2*time.Second).Should(Succeed())
+
+			By("verifying the CR has a finalizer")
+			cmd = exec.Command("kubectl", "get", "carbidedeployment", crName,
+				"-n", crNamespace,
+				"-o", "jsonpath={.metadata.finalizers}")
+			output, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(ContainSubstring("carbide.nvidia.com/finalizer"))
+
+			By("verifying conditions are set")
+			cmd = exec.Command("kubectl", "get", "carbidedeployment", crName,
+				"-n", crNamespace,
+				"-o", "jsonpath={.status.conditions[*].type}")
+			output, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(ContainSubstring("Ready"))
+
+			By("cleaning up the CR")
+			cmd = exec.Command("kubectl", "delete", "carbidedeployment", crName, "-n", crNamespace, "--timeout=30s")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			cmd = exec.Command("kubectl", "delete", "ns", crNamespace, "--timeout=30s")
+			_, _ = utils.Run(cmd)
+		})
 	})
 })
 
