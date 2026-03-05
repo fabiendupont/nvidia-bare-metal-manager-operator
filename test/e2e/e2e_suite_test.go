@@ -68,10 +68,16 @@ var _ = BeforeSuite(func() {
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the manager(Operator) image into Kind")
 
 	By("installing PGO (Crunchy PostgreSQL Operator)")
-	cmd = exec.Command("kubectl", "apply", "-k",
-		"https://github.com/CrunchyData/postgres-operator-examples/kustomize/install/default")
+	cmd = exec.Command("kubectl", "apply", "--server-side", "-k",
+		"https://github.com/CrunchyData/postgres-operator//config/default")
 	_, err = utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to install PGO")
+
+	By("waiting for PGO to be ready")
+	cmd = exec.Command("kubectl", "wait", "--for=condition=Available",
+		"deployment/pgo", "-n", "postgres-operator", "--timeout=120s")
+	_, err = utils.Run(cmd)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "PGO not ready in time")
 
 	if !skipCertManagerInstall {
 		By("installing cert-manager")
