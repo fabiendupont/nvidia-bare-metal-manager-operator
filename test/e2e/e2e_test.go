@@ -229,6 +229,9 @@ var _ = Describe("Manager", Ordered, func() {
 			By("creating the test namespace")
 			cmd := exec.Command("kubectl", "create", "ns", cmNamespace)
 			_, _ = utils.Run(cmd)
+
+			By("creating per-user PostgreSQL secrets")
+			createPGUserSecrets(cmNamespace)
 		})
 
 		AfterEach(func() {
@@ -288,10 +291,20 @@ spec:
   infrastructure:
     namespace: %s
     postgresql:
-      mode: managed
-      version: "16"
-      storage:
-        size: 1Gi
+      mode: external
+      connection:
+        host: postgres.postgres-e2e.svc
+        port: 5432
+        sslMode: disable
+        userSecrets:
+          carbide:
+            name: pg-carbide
+          forge:
+            name: pg-forge
+          rla:
+            name: pg-rla
+          psm:
+            name: pg-psm
   core:
     namespace: %s
     api:
@@ -389,6 +402,9 @@ spec:
 			By("creating the test namespace")
 			cmd := exec.Command("kubectl", "create", "ns", spiffeNamespace)
 			_, _ = utils.Run(cmd)
+
+			By("creating per-user PostgreSQL secrets")
+			createPGUserSecrets(spiffeNamespace)
 		})
 
 		AfterEach(func() {
@@ -425,10 +441,20 @@ spec:
   infrastructure:
     namespace: %s
     postgresql:
-      mode: managed
-      version: "16"
-      storage:
-        size: 1Gi
+      mode: external
+      connection:
+        host: postgres.postgres-e2e.svc
+        port: 5432
+        sslMode: disable
+        userSecrets:
+          carbide:
+            name: pg-carbide
+          forge:
+            name: pg-forge
+          rla:
+            name: pg-rla
+          psm:
+            name: pg-psm
   core:
     namespace: %s
     api:
@@ -556,6 +582,36 @@ func getMetricsOutput() (string, error) {
 	By("getting the curl-metrics logs")
 	cmd := exec.Command("kubectl", "logs", "curl-metrics", "-n", namespace)
 	return utils.Run(cmd)
+}
+
+// createPGUserSecrets creates per-user PostgreSQL secrets in the given namespace
+// matching the external PostgreSQL deployed in BeforeSuite.
+func createPGUserSecrets(namespace string) {
+	for _, user := range []string{"carbide", "forge", "rla", "psm"} {
+		secretYAML := fmt.Sprintf(`apiVersion: v1
+kind: Secret
+metadata:
+  name: pg-%s
+  namespace: %s
+stringData:
+  host: postgres.postgres-e2e.svc
+  port: "5432"
+  user: %s
+  password: e2e-test-password
+  dbname: %s
+  username: %s
+`, user, namespace, user, user, user)
+
+		secretFile := filepath.Join("/tmp", fmt.Sprintf("e2e-pg-secret-%s.yaml", user))
+		err := os.WriteFile(secretFile, []byte(secretYAML), 0o644)
+		ExpectWithOffset(2, err).NotTo(HaveOccurred())
+		defer os.Remove(secretFile)
+
+		cmd := exec.Command("kubectl", "apply", "-f", secretFile)
+		_, err = utils.Run(cmd)
+		ExpectWithOffset(2, err).NotTo(HaveOccurred(),
+			fmt.Sprintf("Failed to create PG secret for user %s", user))
+	}
 }
 
 // tokenRequest is a simplified representation of the Kubernetes TokenRequest API response,

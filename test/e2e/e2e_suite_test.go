@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -67,20 +68,101 @@ var _ = BeforeSuite(func() {
 	err = utils.LoadImageToKindClusterWithName(projectImage)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the manager(Operator) image into Kind")
 
-	By("installing PGO (Crunchy PostgreSQL Operator)")
-	cmd = exec.Command("kubectl", "create", "namespace", "postgres-operator")
-	_, _ = utils.Run(cmd) // ignore if already exists
+	By("deploying a standalone PostgreSQL for E2E tests")
+	// Deploy a plain PostgreSQL instead of relying on PGO — the Crunchy operator
+	// image is on a private registry that is unreliable in CI. The CarbideDeployment
+	// CRs in E2E use external mode pointing to this standalone PostgreSQL.
+	pgManifest := `
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: postgres-e2e
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-credentials
+  namespace: postgres-e2e
+stringData:
+  POSTGRES_USER: carbide
+  POSTGRES_PASSWORD: e2e-test-password
+  POSTGRES_DB: carbide
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: postgres-e2e
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: docker.io/library/postgres:16-alpine
+        ports:
+        - containerPort: 5432
+        envFrom:
+        - secretRef:
+            name: postgres-credentials
+        readinessProbe:
+          exec:
+            command: ["pg_isready", "-U", "carbide"]
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: postgres-e2e
+spec:
+  selector:
+    app: postgres
+  ports:
+  - port: 5432
+    targetPort: 5432
+`
+	pgFile := filepath.Join("/tmp", "e2e-postgres.yaml")
+	err = os.WriteFile(pgFile, []byte(pgManifest), 0o644)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred())
+	defer os.Remove(pgFile)
 
+	cmd = exec.Command("kubectl", "apply", "-f", pgFile)
+	_, err = utils.Run(cmd)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to deploy PostgreSQL")
+
+	By("waiting for PostgreSQL to be ready")
+	cmd = exec.Command("kubectl", "wait", "--for=condition=Ready",
+		"pod/postgres-0", "-n", "postgres-e2e", "--timeout=120s")
+	_, err = utils.Run(cmd)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "PostgreSQL not ready in time")
+
+	By("creating databases for all services")
+	for _, db := range []string{"forge", "rla", "psm", "temporal", "temporal_visibility"} {
+		cmd = exec.Command("kubectl", "exec", "postgres-0", "-n", "postgres-e2e", "--",
+			"psql", "-U", "carbide", "-c", fmt.Sprintf("CREATE DATABASE %s;", db))
+		_, _ = utils.Run(cmd) // ignore if exists
+		cmd = exec.Command("kubectl", "exec", "postgres-0", "-n", "postgres-e2e", "--",
+			"psql", "-U", "carbide", "-c", fmt.Sprintf("CREATE USER %s WITH PASSWORD 'e2e-test-password';", db))
+		_, _ = utils.Run(cmd)
+		cmd = exec.Command("kubectl", "exec", "postgres-0", "-n", "postgres-e2e", "--",
+			"psql", "-U", "carbide", "-c", fmt.Sprintf("GRANT ALL PRIVILEGES ON DATABASE %s TO %s;", db, db))
+		_, _ = utils.Run(cmd)
+	}
+
+	By("installing PGO CRDs (for PostgresCluster CR validation)")
 	cmd = exec.Command("kubectl", "apply", "--server-side", "-k",
-		"https://github.com/CrunchyData/postgres-operator//config/default")
+		"https://github.com/CrunchyData/postgres-operator//config/crd")
 	_, err = utils.Run(cmd)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to install PGO")
-
-	By("waiting for PGO to be ready")
-	cmd = exec.Command("kubectl", "wait", "--for=condition=Available",
-		"deployment/pgo", "-n", "postgres-operator", "--timeout=300s")
-	_, err = utils.Run(cmd)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "PGO not ready in time")
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to install PGO CRDs")
 
 	if !skipCertManagerInstall {
 		By("installing cert-manager")
