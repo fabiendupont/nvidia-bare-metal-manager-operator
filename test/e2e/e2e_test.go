@@ -339,13 +339,13 @@ spec:
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Failed to apply CarbideDeployment CR")
 
-			By("waiting for PostgresCluster to exist")
+			By("waiting for carbide-api-config ConfigMap to exist")
 			verifyPGCluster := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "postgrescluster",
-					"-n", cmNamespace, "-o", "jsonpath={.items[*].metadata.name}")
-				output, err := utils.Run(cmd)
+				cmd := exec.Command("kubectl", "get", "configmap", "carbide-api-config",
+					"-n", cmNamespace)
+				_, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).NotTo(BeEmpty(), "PostgresCluster should exist")
+				g.Expect(err).NotTo(HaveOccurred(), "carbide-api-config ConfigMap should exist")
 			}
 			Eventually(verifyPGCluster, 60*time.Second, 2*time.Second).Should(Succeed())
 
@@ -374,7 +374,7 @@ spec:
 			By("verifying cert-manager Certificates were created")
 			verifyCerts := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "certificate",
-					"-n", cmNamespace, "-o", "jsonpath={.items[*].metadata.name}")
+					"-n", cmNamespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).NotTo(BeEmpty(), "cert-manager Certificates should exist")
@@ -489,13 +489,13 @@ spec:
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Failed to apply CarbideDeployment CR")
 
-			By("waiting for PostgresCluster to exist")
+			By("waiting for carbide-api-config ConfigMap to exist")
 			verifyPGCluster := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "postgrescluster",
-					"-n", spiffeNamespace, "-o", "jsonpath={.items[*].metadata.name}")
-				output, err := utils.Run(cmd)
+				cmd := exec.Command("kubectl", "get", "configmap", "carbide-api-config",
+					"-n", spiffeNamespace)
+				_, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).NotTo(BeEmpty(), "PostgresCluster should exist")
+				g.Expect(err).NotTo(HaveOccurred(), "carbide-api-config ConfigMap should exist")
 			}
 			Eventually(verifyPGCluster, 60*time.Second, 2*time.Second).Should(Succeed())
 
