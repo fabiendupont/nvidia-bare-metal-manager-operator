@@ -123,7 +123,7 @@ spec:
   # Optional: Link to Site CRD in hub cluster
   siteRef:
     cluster: "https://management.k8s.example.com"
-    namespace: "carbide-mgmt"
+    namespace: "nvidia-carbide-mgmt"
     name: "boston-site"
     uuid: "site-boston-abc123"
 
@@ -297,7 +297,7 @@ status:
 spec:
   siteRef:
     cluster: "https://management.k8s.example.com"  # Hub cluster (optional)
-    namespace: "carbide-mgmt"
+    namespace: "nvidia-carbide-mgmt"
     name: "boston-site"
     uuid: "site-boston-abc123"  # Should match Site CRD's spec.uuid
 ```

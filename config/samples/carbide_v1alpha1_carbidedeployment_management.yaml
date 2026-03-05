@@ -13,7 +13,7 @@ spec:
     domain: "bmm.example.com"
 
   infrastructure:
-    namespace: "carbide-mgmt"
+    namespace: "nvidia-carbide-mgmt"
     storageClass: "local-path"
 
     postgresql:
@@ -46,7 +46,7 @@ spec:
 
   rest:
     enabled: true
-    namespace: "carbide-mgmt"
+    namespace: "nvidia-carbide-mgmt"
 
     temporal:
       mode: managed

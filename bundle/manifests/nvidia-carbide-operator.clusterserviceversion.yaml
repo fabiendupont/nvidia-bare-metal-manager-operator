@@ -214,7 +214,7 @@ metadata:
               }
             },
             "siteRef": {
-              "namespace": "carbide-mgmt",
+              "namespace": "nvidia-carbide-mgmt",
               "name": "edge-site-1"
             },
             "network": {

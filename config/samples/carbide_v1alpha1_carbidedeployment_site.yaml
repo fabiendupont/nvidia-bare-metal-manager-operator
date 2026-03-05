@@ -12,7 +12,7 @@ spec:
   # Optional: Link to Site CRD in hub cluster (documents hub-spoke relationship)
   siteRef:
     cluster: "https://management.k8s.example.com"  # Hub cluster identifier (URL, name, or omit if same cluster)
-    namespace: "carbide-mgmt"
+    namespace: "nvidia-carbide-mgmt"
     name: "boston-site"
     uuid: "site-boston-abc123"  # Should match Site CRD's spec.uuid
 

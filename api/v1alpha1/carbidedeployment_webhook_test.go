@@ -295,9 +295,9 @@ func TestDefault_Namespace(t *testing.T) {
 		profile DeploymentProfile
 		wantNS  string
 	}{
-		{"management", "test-mgmt", ProfileManagement, "carbide-mgmt"},
+		{"management", "test-mgmt", ProfileManagement, "nvidia-carbide-mgmt"},
 		{"site", "mysite", ProfileSite, "carbide-site-mysite"},
-		{"management-with-site", "test", ProfileManagementWithSite, "carbide"},
+		{"management-with-site", "test", ProfileManagementWithSite, "nvidia-carbide"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

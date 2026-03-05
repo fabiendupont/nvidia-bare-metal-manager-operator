@@ -44,11 +44,11 @@ func (r *CarbideDeployment) Default() {
 	if r.Spec.Infrastructure != nil && r.Spec.Infrastructure.Namespace == "" {
 		switch r.Spec.Profile {
 		case ProfileManagement:
-			r.Spec.Infrastructure.Namespace = "carbide-mgmt"
+			r.Spec.Infrastructure.Namespace = "nvidia-carbide-mgmt"
 		case ProfileSite:
 			r.Spec.Infrastructure.Namespace = fmt.Sprintf("carbide-site-%s", r.Name)
 		case ProfileManagementWithSite:
-			r.Spec.Infrastructure.Namespace = "carbide"
+			r.Spec.Infrastructure.Namespace = "nvidia-carbide"
 		}
 	}
 

@@ -203,9 +203,9 @@ type InfrastructureConfig struct {
 
 	// Namespace for infrastructure components
 	// Defaults based on profile:
-	//   - management: "carbide-mgmt"
+	//   - management: "nvidia-carbide-mgmt"
 	//   - site: "carbide-site-{deployment-name}"
-	//   - management-with-site: "carbide"
+	//   - management-with-site: "nvidia-carbide"
 	// +optional
 	Namespace string `json:"namespace,omitempty"`
 }

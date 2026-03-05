@@ -35,7 +35,7 @@ import (
 )
 
 const (
-	restDefaultNamespace  = "carbide"
+	restDefaultNamespace  = "nvidia-carbide"
 	restTemporalNamespace = "temporal"
 )
 
