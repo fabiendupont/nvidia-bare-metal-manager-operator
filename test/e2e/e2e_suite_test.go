@@ -68,6 +68,9 @@ var _ = BeforeSuite(func() {
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the manager(Operator) image into Kind")
 
 	By("installing PGO (Crunchy PostgreSQL Operator)")
+	cmd = exec.Command("kubectl", "create", "namespace", "postgres-operator")
+	_, _ = utils.Run(cmd) // ignore if already exists
+
 	cmd = exec.Command("kubectl", "apply", "--server-side", "-k",
 		"https://github.com/CrunchyData/postgres-operator//config/default")
 	_, err = utils.Run(cmd)
