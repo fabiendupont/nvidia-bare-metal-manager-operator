@@ -187,13 +187,18 @@ spec:
 		cmd = exec.Command("helm", "repo", "update")
 		_, _ = utils.Run(cmd)
 
-		// Install SPIRE with CRDs enabled and skip ClusterSPIFFEID resources
-		// that require the controller-manager to be running first
+		// Install SPIRE CRDs first, then the chart without --wait
+		// (SPIRE images are large and take time to pull in CI)
+		cmd = exec.Command("helm", "install", "spire-crds", "spiffe/spire-crds",
+			"-n", "spire", "--create-namespace")
+		_, err = utils.Run(cmd)
+		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to install SPIRE CRDs")
+
 		cmd = exec.Command("helm", "install", "spire", "spiffe/spire",
-			"-n", "spire", "--create-namespace",
-			"--set", "spire-crds.enabled=true",
+			"-n", "spire",
+			"--set", "spire-crds.enabled=false",
 			"--set", "spire-server.controllerManager.enabled=false",
-			"--wait", "--timeout", "5m")
+			"--timeout", "10m")
 		_, err = utils.Run(cmd)
 		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to install SPIRE")
 	}
