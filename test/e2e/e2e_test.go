@@ -291,14 +291,12 @@ spec:
   core:
     api:
       port: 1079
-  rest:
-    enabled: true
-    temporal:
-      mode: managed
-    keycloak:
-      mode: disabled
-    restAPI:
-      port: 8080
+    dhcp:
+      enabled: false
+    dns:
+      enabled: false
+    pxe:
+      enabled: false
 `, crName, crNamespace)
 
 			crFile := filepath.Join("/tmp", "e2e-cr.yaml")
