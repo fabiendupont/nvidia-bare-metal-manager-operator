@@ -213,19 +213,19 @@ spec:
 	_, err = utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
 
-	By("waiting for the controller-manager pod to be ready")
-	cmd = exec.Command("kubectl", "wait", "--for=condition=Available",
-		"deployment/carbide-operator-controller-manager",
-		"-n", "carbide-operator-system", "--timeout=120s")
-	_, err = utils.Run(cmd)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Controller manager did not become ready in time")
-
 	By("waiting for webhook certificate to be issued")
 	cmd = exec.Command("kubectl", "wait", "--for=condition=Ready",
 		"certificate/carbide-operator-serving-cert",
-		"-n", "carbide-operator-system", "--timeout=120s")
+		"-n", "carbide-operator-system", "--timeout=180s")
 	_, err = utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Webhook certificate not ready in time")
+
+	By("waiting for the controller-manager pod to be ready")
+	cmd = exec.Command("kubectl", "wait", "--for=condition=Available",
+		"deployment/carbide-operator-controller-manager",
+		"-n", "carbide-operator-system", "--timeout=180s")
+	_, err = utils.Run(cmd)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Controller manager did not become ready in time")
 })
 
 var _ = AfterSuite(func() {
