@@ -78,7 +78,7 @@ var _ = BeforeSuite(func() {
 
 	By("waiting for PGO to be ready")
 	cmd = exec.Command("kubectl", "wait", "--for=condition=Available",
-		"deployment/pgo", "-n", "postgres-operator", "--timeout=120s")
+		"deployment/pgo", "-n", "postgres-operator", "--timeout=300s")
 	_, err = utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "PGO not ready in time")
 
