@@ -7,7 +7,10 @@ on:
 env:
   IMG: localhost/nvidia-carbide-operator:e2e
   DOCKERFILE: Dockerfile.ci
-  CERT_MANAGER_INSTALL_SKIP: "true"
+  # Install both cert-manager and SPIRE for full E2E coverage
+  # Set to "true" to skip if already installed on the target cluster
+  CERT_MANAGER_INSTALL_SKIP: "false"
+  SPIRE_INSTALL_SKIP: "false"
 
 jobs:
   test-e2e:
