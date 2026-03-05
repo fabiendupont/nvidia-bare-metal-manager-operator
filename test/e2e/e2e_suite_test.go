@@ -25,6 +25,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -209,9 +210,19 @@ spec:
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to install CRDs")
 
 	By("deploying the controller-manager")
-	cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
-	_, err = utils.Run(cmd)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
+	// Retry deploy — cert-manager webhooks may not be immediately ready
+	// after installation, causing Issuer/Certificate creation to fail
+	var deployErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
+		_, deployErr = utils.Run(cmd)
+		if deployErr == nil {
+			break
+		}
+		_, _ = fmt.Fprintf(GinkgoWriter, "Deploy attempt %d failed, retrying in 10s...\n", attempt+1)
+		time.Sleep(10 * time.Second)
+	}
+	ExpectWithOffset(1, deployErr).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
 
 	By("waiting for webhook certificate to be issued")
 	cmd = exec.Command("kubectl", "wait", "--for=condition=Ready",
