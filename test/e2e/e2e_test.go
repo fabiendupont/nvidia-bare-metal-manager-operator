@@ -394,6 +394,604 @@ spec:
 		})
 	})
 
+	Context("Webhook validation", func() {
+		It("should reject a site profile without network config", func() {
+			cr := `apiVersion: carbide.nvidia.com/v1alpha1
+kind: CarbideDeployment
+metadata:
+  name: e2e-webhook-no-network
+  namespace: default
+spec:
+  profile: site
+  version: "latest"
+  network:
+    domain: carbide.local
+  core:
+    api:
+      port: 1079
+    dhcp:
+      enabled: false
+    dns:
+      enabled: false
+    pxe:
+      enabled: false
+`
+			crFile := filepath.Join("/tmp", "e2e-webhook-no-network.yaml")
+			err := os.WriteFile(crFile, []byte(cr), 0o644)
+			Expect(err).NotTo(HaveOccurred())
+			defer os.Remove(crFile)
+
+			cmd := exec.Command("kubectl", "apply", "-f", crFile)
+			output, err := utils.Run(cmd)
+			Expect(err).To(HaveOccurred(), "expected webhook to reject CR without network config")
+			Expect(output).To(ContainSubstring("required"))
+		})
+
+		It("should reject external PostgreSQL without host", func() {
+			cr := `apiVersion: carbide.nvidia.com/v1alpha1
+kind: CarbideDeployment
+metadata:
+  name: e2e-webhook-no-pg-host
+  namespace: default
+spec:
+  profile: management
+  version: "latest"
+  network:
+    domain: carbide.local
+  infrastructure:
+    postgresql:
+      mode: external
+      connection:
+        host: ""
+        port: 5432
+  core:
+    api:
+      port: 1079
+    dhcp:
+      enabled: false
+    dns:
+      enabled: false
+    pxe:
+      enabled: false
+  rest:
+    temporal:
+      mode: managed
+    keycloak:
+      mode: disabled
+    restAPI:
+      port: 8080
+`
+			crFile := filepath.Join("/tmp", "e2e-webhook-no-pg-host.yaml")
+			err := os.WriteFile(crFile, []byte(cr), 0o644)
+			Expect(err).NotTo(HaveOccurred())
+			defer os.Remove(crFile)
+
+			cmd := exec.Command("kubectl", "apply", "-f", crFile)
+			output, err := utils.Run(cmd)
+			Expect(err).To(HaveOccurred(), "expected webhook to reject CR without PG host")
+			Expect(output).To(ContainSubstring("required"))
+		})
+
+		It("should reject certManager TLS without issuerRef", func() {
+			cr := `apiVersion: carbide.nvidia.com/v1alpha1
+kind: CarbideDeployment
+metadata:
+  name: e2e-webhook-no-issuer
+  namespace: default
+spec:
+  profile: management
+  version: "latest"
+  tls:
+    mode: certManager
+  network:
+    domain: carbide.local
+  core:
+    api:
+      port: 1079
+    dhcp:
+      enabled: false
+    dns:
+      enabled: false
+    pxe:
+      enabled: false
+  rest:
+    temporal:
+      mode: managed
+    keycloak:
+      mode: disabled
+    restAPI:
+      port: 8080
+`
+			crFile := filepath.Join("/tmp", "e2e-webhook-no-issuer.yaml")
+			err := os.WriteFile(crFile, []byte(cr), 0o644)
+			Expect(err).NotTo(HaveOccurred())
+			defer os.Remove(crFile)
+
+			cmd := exec.Command("kubectl", "apply", "-f", crFile)
+			output, err := utils.Run(cmd)
+			Expect(err).To(HaveOccurred(), "expected webhook to reject CR without issuerRef")
+			Expect(output).To(ContainSubstring("required"))
+		})
+
+		It("should reject management profile without rest config", func() {
+			cr := `apiVersion: carbide.nvidia.com/v1alpha1
+kind: CarbideDeployment
+metadata:
+  name: e2e-webhook-no-rest
+  namespace: default
+spec:
+  profile: management
+  version: "latest"
+  network:
+    domain: carbide.local
+  core:
+    api:
+      port: 1079
+    dhcp:
+      enabled: false
+    dns:
+      enabled: false
+    pxe:
+      enabled: false
+`
+			crFile := filepath.Join("/tmp", "e2e-webhook-no-rest.yaml")
+			err := os.WriteFile(crFile, []byte(cr), 0o644)
+			Expect(err).NotTo(HaveOccurred())
+			defer os.Remove(crFile)
+
+			cmd := exec.Command("kubectl", "apply", "-f", crFile)
+			output, err := utils.Run(cmd)
+			Expect(err).To(HaveOccurred(), "expected webhook to reject management profile without rest config")
+			Expect(output).To(ContainSubstring("required"))
+		})
+	})
+
+	Context("CR update handling", func() {
+		const updateNamespace = "nvidia-carbide-e2e-update"
+		const updateCRName = "e2e-update"
+
+		BeforeEach(func() {
+			By("creating the test namespace")
+			cmd := exec.Command("kubectl", "create", "ns", updateNamespace)
+			_, _ = utils.Run(cmd)
+		})
+
+		AfterEach(func() {
+			By("cleaning up the CarbideDeployment CR")
+			cmd := exec.Command("kubectl", "delete", "carbidedeployment", updateCRName,
+				"-n", updateNamespace, "--timeout=60s", "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+
+			By("cleaning up the test namespace")
+			cmd = exec.Command("kubectl", "delete", "ns", updateNamespace,
+				"--timeout=60s", "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+		})
+
+		It("should update ConfigMap when API port changes", func() {
+			By("applying a management-profile CR with api.port 1079")
+			cr := fmt.Sprintf(`apiVersion: carbide.nvidia.com/v1alpha1
+kind: CarbideDeployment
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  profile: management
+  version: "latest"
+  network:
+    domain: carbide.local
+  core:
+    namespace: %s
+    api:
+      port: 1079
+    dhcp:
+      enabled: false
+    dns:
+      enabled: false
+    pxe:
+      enabled: false
+  rest:
+    temporal:
+      mode: managed
+    keycloak:
+      mode: disabled
+    restAPI:
+      port: 8080
+`, updateCRName, updateNamespace, updateNamespace)
+
+			crFile := filepath.Join("/tmp", "e2e-cr-update.yaml")
+			err := os.WriteFile(crFile, []byte(cr), 0o644)
+			Expect(err).NotTo(HaveOccurred())
+			defer os.Remove(crFile)
+
+			cmd := exec.Command("kubectl", "apply", "-f", crFile)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply CarbideDeployment CR")
+
+			By("waiting for reconciliation (finalizer exists)")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "carbidedeployment", updateCRName,
+					"-n", updateNamespace,
+					"-o", "jsonpath={.metadata.finalizers}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(ContainSubstring("carbide.nvidia.com/finalizer"))
+			}, 60*time.Second, 2*time.Second).Should(Succeed())
+
+			By("patching the CR to change api.port to 2079")
+			cmd = exec.Command("kubectl", "patch", "carbidedeployment", updateCRName,
+				"-n", updateNamespace, "--type=merge",
+				"-p", `{"spec":{"core":{"api":{"port":2079}}}}`)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to patch CarbideDeployment CR")
+
+			By("verifying ConfigMap data contains the updated port")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "configmap", "carbide-api-config",
+					"-n", updateNamespace, "-o", "jsonpath={.data}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(ContainSubstring("2079"))
+			}, 60*time.Second, 2*time.Second).Should(Succeed())
+		})
+	})
+
+	Context("CR deletion", func() {
+		const deleteNamespace = "nvidia-carbide-e2e-delete"
+		const deleteCRName = "e2e-delete"
+
+		BeforeEach(func() {
+			By("creating the test namespace")
+			cmd := exec.Command("kubectl", "create", "ns", deleteNamespace)
+			_, _ = utils.Run(cmd)
+		})
+
+		AfterEach(func() {
+			By("cleaning up the test namespace")
+			cmd := exec.Command("kubectl", "delete", "ns", deleteNamespace,
+				"--timeout=60s", "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+		})
+
+		It("should clean up child resources when CR is deleted", func() {
+			By("applying a management-profile CR")
+			cr := fmt.Sprintf(`apiVersion: carbide.nvidia.com/v1alpha1
+kind: CarbideDeployment
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  profile: management
+  version: "latest"
+  network:
+    domain: carbide.local
+  core:
+    namespace: %s
+    api:
+      port: 1079
+    dhcp:
+      enabled: false
+    dns:
+      enabled: false
+    pxe:
+      enabled: false
+  rest:
+    temporal:
+      mode: managed
+    keycloak:
+      mode: disabled
+    restAPI:
+      port: 8080
+`, deleteCRName, deleteNamespace, deleteNamespace)
+
+			crFile := filepath.Join("/tmp", "e2e-cr-delete.yaml")
+			err := os.WriteFile(crFile, []byte(cr), 0o644)
+			Expect(err).NotTo(HaveOccurred())
+			defer os.Remove(crFile)
+
+			cmd := exec.Command("kubectl", "apply", "-f", crFile)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply CarbideDeployment CR")
+
+			By("waiting for finalizer and conditions")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "carbidedeployment", deleteCRName,
+					"-n", deleteNamespace,
+					"-o", "jsonpath={.metadata.finalizers}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(ContainSubstring("carbide.nvidia.com/finalizer"))
+			}, 60*time.Second, 2*time.Second).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "carbidedeployment", deleteCRName,
+					"-n", deleteNamespace,
+					"-o", "jsonpath={.status.conditions[*].type}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).NotTo(BeEmpty(), "status.conditions should be set")
+			}, 60*time.Second, 2*time.Second).Should(Succeed())
+
+			By("verifying at least one child resource exists")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "serviceaccount,configmap",
+					"-n", deleteNamespace,
+					"-o", "jsonpath={.items[*].metadata.name}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).NotTo(BeEmpty(), "expected child resources to exist")
+			}, 60*time.Second, 2*time.Second).Should(Succeed())
+
+			By("deleting the CarbideDeployment CR")
+			cmd = exec.Command("kubectl", "delete", "carbidedeployment", deleteCRName,
+				"-n", deleteNamespace, "--timeout=60s")
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to delete CarbideDeployment CR")
+
+			By("verifying the CR is gone")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "carbidedeployment", deleteCRName,
+					"-n", deleteNamespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).To(HaveOccurred(), "CR should no longer exist")
+			}, 60*time.Second, 2*time.Second).Should(Succeed())
+		})
+	})
+
+	Context("Status progression", func() {
+		const statusNamespace = "nvidia-carbide-e2e-status"
+		const statusCRName = "e2e-status"
+
+		BeforeEach(func() {
+			By("creating the test namespace")
+			cmd := exec.Command("kubectl", "create", "ns", statusNamespace)
+			_, _ = utils.Run(cmd)
+		})
+
+		AfterEach(func() {
+			By("cleaning up the CarbideDeployment CR")
+			cmd := exec.Command("kubectl", "delete", "carbidedeployment", statusCRName,
+				"-n", statusNamespace, "--timeout=60s", "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+
+			By("cleaning up the test namespace")
+			cmd = exec.Command("kubectl", "delete", "ns", statusNamespace,
+				"--timeout=60s", "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+		})
+
+		It("should set phase to Provisioning and populate conditions", func() {
+			By("applying a management-profile CR")
+			cr := fmt.Sprintf(`apiVersion: carbide.nvidia.com/v1alpha1
+kind: CarbideDeployment
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  profile: management
+  version: "latest"
+  network:
+    domain: carbide.local
+  core:
+    namespace: %s
+    api:
+      port: 1079
+    dhcp:
+      enabled: false
+    dns:
+      enabled: false
+    pxe:
+      enabled: false
+  rest:
+    temporal:
+      mode: managed
+    keycloak:
+      mode: disabled
+    restAPI:
+      port: 8080
+`, statusCRName, statusNamespace, statusNamespace)
+
+			crFile := filepath.Join("/tmp", "e2e-cr-status.yaml")
+			err := os.WriteFile(crFile, []byte(cr), 0o644)
+			Expect(err).NotTo(HaveOccurred())
+			defer os.Remove(crFile)
+
+			cmd := exec.Command("kubectl", "apply", "-f", crFile)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply CarbideDeployment CR")
+
+			By("verifying status.phase is not empty")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "carbidedeployment", statusCRName,
+					"-n", statusNamespace,
+					"-o", "jsonpath={.status.phase}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).NotTo(BeEmpty(), "status.phase should be set")
+			}, 60*time.Second, 2*time.Second).Should(Succeed())
+
+			By("verifying status.conditions contains Ready type")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "carbidedeployment", statusCRName,
+					"-n", statusNamespace,
+					"-o", "jsonpath={.status.conditions[*].type}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(ContainSubstring("Ready"))
+			}, 60*time.Second, 2*time.Second).Should(Succeed())
+
+			By("verifying status.observedGeneration equals metadata.generation")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "carbidedeployment", statusCRName,
+					"-n", statusNamespace,
+					"-o", "jsonpath={.metadata.generation}")
+				generation, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(generation).NotTo(BeEmpty())
+
+				cmd = exec.Command("kubectl", "get", "carbidedeployment", statusCRName,
+					"-n", statusNamespace,
+					"-o", "jsonpath={.status.observedGeneration}")
+				observedGeneration, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(observedGeneration).To(Equal(generation))
+			}, 60*time.Second, 2*time.Second).Should(Succeed())
+		})
+	})
+
+	Context("Multi-profile deployment", func() {
+		const mgmtNamespace = "nvidia-carbide-e2e-mgmt"
+		const siteNamespace = "nvidia-carbide-e2e-site"
+		const mgmtCRName = "e2e-multi-mgmt"
+		const siteCRName = "e2e-multi-site"
+
+		BeforeEach(func() {
+			By("creating the management test namespace")
+			cmd := exec.Command("kubectl", "create", "ns", mgmtNamespace)
+			_, _ = utils.Run(cmd)
+
+			By("creating the site test namespace")
+			cmd = exec.Command("kubectl", "create", "ns", siteNamespace)
+			_, _ = utils.Run(cmd)
+		})
+
+		AfterEach(func() {
+			By("cleaning up the management CarbideDeployment CR")
+			cmd := exec.Command("kubectl", "delete", "carbidedeployment", mgmtCRName,
+				"-n", mgmtNamespace, "--timeout=60s", "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+
+			By("cleaning up the site CarbideDeployment CR")
+			cmd = exec.Command("kubectl", "delete", "carbidedeployment", siteCRName,
+				"-n", siteNamespace, "--timeout=60s", "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+
+			By("cleaning up the management test namespace")
+			cmd = exec.Command("kubectl", "delete", "ns", mgmtNamespace,
+				"--timeout=60s", "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+
+			By("cleaning up the site test namespace")
+			cmd = exec.Command("kubectl", "delete", "ns", siteNamespace,
+				"--timeout=60s", "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+		})
+
+		It("should reconcile management and site profiles in separate namespaces", func() {
+			By("applying a management-profile CR in the management namespace")
+			mgmtCR := fmt.Sprintf(`apiVersion: carbide.nvidia.com/v1alpha1
+kind: CarbideDeployment
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  profile: management
+  version: "latest"
+  network:
+    domain: carbide.local
+  core:
+    namespace: %s
+    api:
+      port: 1079
+    dhcp:
+      enabled: false
+    dns:
+      enabled: false
+    pxe:
+      enabled: false
+  rest:
+    temporal:
+      mode: managed
+    keycloak:
+      mode: disabled
+    restAPI:
+      port: 8080
+`, mgmtCRName, mgmtNamespace, mgmtNamespace)
+
+			mgmtFile := filepath.Join("/tmp", "e2e-cr-multi-mgmt.yaml")
+			err := os.WriteFile(mgmtFile, []byte(mgmtCR), 0o644)
+			Expect(err).NotTo(HaveOccurred())
+			defer os.Remove(mgmtFile)
+
+			cmd := exec.Command("kubectl", "apply", "-f", mgmtFile)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply management CarbideDeployment CR")
+
+			By("applying a site-profile CR in the site namespace")
+			siteCR := fmt.Sprintf(`apiVersion: carbide.nvidia.com/v1alpha1
+kind: CarbideDeployment
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  profile: site
+  version: "latest"
+  network:
+    interface: eth0
+    ip: 10.0.0.1
+    adminNetworkCIDR: 10.0.0.0/24
+    domain: carbide.local
+  core:
+    namespace: %s
+    api:
+      port: 1079
+    dhcp:
+      enabled: false
+    dns:
+      enabled: false
+    pxe:
+      enabled: false
+`, siteCRName, siteNamespace, siteNamespace)
+
+			siteFile := filepath.Join("/tmp", "e2e-cr-multi-site.yaml")
+			err = os.WriteFile(siteFile, []byte(siteCR), 0o644)
+			Expect(err).NotTo(HaveOccurred())
+			defer os.Remove(siteFile)
+
+			cmd = exec.Command("kubectl", "apply", "-f", siteFile)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply site CarbideDeployment CR")
+
+			By("verifying management CR has finalizer and conditions")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "carbidedeployment", mgmtCRName,
+					"-n", mgmtNamespace,
+					"-o", "jsonpath={.metadata.finalizers}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(ContainSubstring("carbide.nvidia.com/finalizer"))
+			}, 60*time.Second, 2*time.Second).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "carbidedeployment", mgmtCRName,
+					"-n", mgmtNamespace,
+					"-o", "jsonpath={.status.conditions[*].type}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).NotTo(BeEmpty(), "management CR conditions should be set")
+			}, 60*time.Second, 2*time.Second).Should(Succeed())
+
+			By("verifying site CR has finalizer and conditions")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "carbidedeployment", siteCRName,
+					"-n", siteNamespace,
+					"-o", "jsonpath={.metadata.finalizers}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(ContainSubstring("carbide.nvidia.com/finalizer"))
+			}, 60*time.Second, 2*time.Second).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "carbidedeployment", siteCRName,
+					"-n", siteNamespace,
+					"-o", "jsonpath={.status.conditions[*].type}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).NotTo(BeEmpty(), "site CR conditions should be set")
+			}, 60*time.Second, 2*time.Second).Should(Succeed())
+		})
+	})
+
 	Context("CarbideDeployment with SPIFFE TLS", func() {
 		const spiffeNamespace = "nvidia-carbide-e2e-spiffe"
 		const spiffeCRName = "e2e-spiffe"
