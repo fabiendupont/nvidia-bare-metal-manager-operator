@@ -47,11 +47,11 @@ func testScheme() *runtime.Scheme {
 }
 
 // newTestDeployment creates a CarbideDeployment for testing.
-func newTestDeployment(name, namespace string, profile carbitev1alpha1.DeploymentProfile) *carbitev1alpha1.CarbideDeployment {
+func newTestDeployment(name string, profile carbitev1alpha1.DeploymentProfile) *carbitev1alpha1.CarbideDeployment {
 	d := &carbitev1alpha1.CarbideDeployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       name,
-			Namespace:  namespace,
+			Namespace:  "default",
 			Generation: 1,
 		},
 		Spec: carbitev1alpha1.CarbideDeploymentSpec{
@@ -226,14 +226,14 @@ func TestReconcile_NotFound_NoError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
-	if result.Requeue {
+	if result.Requeue || result.RequeueAfter > 0 { //nolint:staticcheck
 		t.Error("expected no requeue for not-found resource")
 	}
 }
 
 func TestReconcile_AddsFinalizer(t *testing.T) {
 	s := testScheme()
-	dep := newTestDeployment("test", "default", carbitev1alpha1.ProfileManagement)
+	dep := newTestDeployment("test", carbitev1alpha1.ProfileManagement)
 	c := buildFakeClient(s, dep)
 	r := &CarbideDeploymentReconciler{Client: c, Scheme: s}
 
@@ -243,7 +243,7 @@ func TestReconcile_AddsFinalizer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
-	if !result.Requeue {
+	if !result.Requeue && result.RequeueAfter == 0 { //nolint:staticcheck
 		t.Error("expected requeue after adding finalizer")
 	}
 
@@ -266,7 +266,7 @@ func TestReconcile_AddsFinalizer(t *testing.T) {
 
 func TestReconcile_InitializesStatus(t *testing.T) {
 	s := testScheme()
-	dep := newTestDeployment("test", "default", carbitev1alpha1.ProfileManagement)
+	dep := newTestDeployment("test", carbitev1alpha1.ProfileManagement)
 	// Pre-add finalizer so we skip that step
 	dep.Finalizers = []string{"carbide.nvidia.com/finalizer"}
 	c := buildFakeClient(s, dep)
@@ -296,7 +296,7 @@ func TestReconcile_InitializesStatus(t *testing.T) {
 
 func TestCoreReconciler_ManagementProfile_SkipsCore(t *testing.T) {
 	s := testScheme()
-	dep := newTestDeployment("test", "default", carbitev1alpha1.ProfileManagement)
+	dep := newTestDeployment("test", carbitev1alpha1.ProfileManagement)
 
 	r := &CoreReconciler{Client: buildFakeClient(s), Scheme: s}
 	status, err := r.Reconcile(context.Background(), dep)
@@ -314,7 +314,7 @@ func TestCoreReconciler_ManagementProfile_SkipsCore(t *testing.T) {
 func TestCoreReconciler_SiteProfile_CreatesResources(t *testing.T) {
 	s := testScheme()
 	ns := "carbide-site-test"
-	dep := newTestDeployment("test", "default", carbitev1alpha1.ProfileSite)
+	dep := newTestDeployment("test", carbitev1alpha1.ProfileSite)
 	dep.Spec.Core.Namespace = ns
 	dep.Spec.Infrastructure = &carbitev1alpha1.InfrastructureConfig{
 		Namespace:  ns,
@@ -371,7 +371,7 @@ func TestCoreReconciler_SiteProfile_CreatesResources(t *testing.T) {
 func TestCoreReconciler_APIReady_CreatesNetworkServices(t *testing.T) {
 	s := testScheme()
 	ns := "carbide"
-	dep := newTestDeployment("test", "default", carbitev1alpha1.ProfileSite)
+	dep := newTestDeployment("test", carbitev1alpha1.ProfileSite)
 	dep.Spec.Core.Namespace = ns
 	dep.Spec.Infrastructure = &carbitev1alpha1.InfrastructureConfig{
 		Namespace:  ns,
@@ -421,7 +421,7 @@ func TestCoreReconciler_APIReady_CreatesNetworkServices(t *testing.T) {
 func TestCoreReconciler_VaultGatesRLAPSM(t *testing.T) {
 	s := testScheme()
 	ns := "carbide"
-	dep := newTestDeployment("test", "default", carbitev1alpha1.ProfileSite)
+	dep := newTestDeployment("test", carbitev1alpha1.ProfileSite)
 	dep.Spec.Core.Namespace = ns
 	dep.Spec.Core.Vault = &carbitev1alpha1.VaultConfig{Mode: carbitev1alpha1.ManagedMode}
 	dep.Spec.Core.RLA = &carbitev1alpha1.RLAConfig{Enabled: true, Port: 50051, Replicas: 1}
@@ -475,7 +475,7 @@ func TestCoreReconciler_VaultGatesRLAPSM(t *testing.T) {
 func TestCoreReconciler_RLAPSMServiceAccounts(t *testing.T) {
 	s := testScheme()
 	ns := "carbide"
-	dep := newTestDeployment("test", "default", carbitev1alpha1.ProfileSite)
+	dep := newTestDeployment("test", carbitev1alpha1.ProfileSite)
 	dep.Spec.Core.Namespace = ns
 	dep.Spec.Core.RLA = &carbitev1alpha1.RLAConfig{Enabled: true}
 	dep.Spec.Core.PSM = &carbitev1alpha1.PSMConfig{Enabled: true}
@@ -510,7 +510,7 @@ func TestCoreReconciler_RLAPSMServiceAccounts(t *testing.T) {
 func TestInfraReconciler_ExternalMode_ValidatesConnection(t *testing.T) {
 	s := testScheme()
 	ns := "carbide"
-	dep := newTestDeployment("test", "default", carbitev1alpha1.ProfileSite)
+	dep := newTestDeployment("test", carbitev1alpha1.ProfileSite)
 	dep.Spec.Infrastructure = &carbitev1alpha1.InfrastructureConfig{
 		Namespace: ns,
 		PostgreSQL: carbitev1alpha1.PostgreSQLConfig{
@@ -539,7 +539,7 @@ func TestInfraReconciler_ExternalMode_ValidatesConnection(t *testing.T) {
 
 func TestRestReconciler_DisabledRest_ReturnsReady(t *testing.T) {
 	s := testScheme()
-	dep := newTestDeployment("test", "default", carbitev1alpha1.ProfileManagement)
+	dep := newTestDeployment("test", carbitev1alpha1.ProfileManagement)
 	dep.Spec.Rest = &carbitev1alpha1.RestConfig{Enabled: false}
 
 	r := &RestReconciler{Client: buildFakeClient(s), Scheme: s}
@@ -555,7 +555,7 @@ func TestRestReconciler_DisabledRest_ReturnsReady(t *testing.T) {
 func TestRestReconciler_DisabledKeycloak_SkipsKeycloak(t *testing.T) {
 	s := testScheme()
 	ns := "carbide"
-	dep := newTestDeployment("test", "default", carbitev1alpha1.ProfileManagement)
+	dep := newTestDeployment("test", carbitev1alpha1.ProfileManagement)
 	dep.Spec.Core.Namespace = ns
 	dep.Spec.Rest = &carbitev1alpha1.RestConfig{
 		Enabled: true,
@@ -604,7 +604,7 @@ func TestRestReconciler_DisabledKeycloak_SkipsKeycloak(t *testing.T) {
 func TestRestReconciler_CreatesServiceAccounts(t *testing.T) {
 	s := testScheme()
 	ns := "carbide"
-	dep := newTestDeployment("test", "default", carbitev1alpha1.ProfileManagement)
+	dep := newTestDeployment("test", carbitev1alpha1.ProfileManagement)
 	dep.Spec.Core.Namespace = ns
 	dep.Spec.Infrastructure = &carbitev1alpha1.InfrastructureConfig{
 		Namespace:  ns,
@@ -644,7 +644,7 @@ func TestRestReconciler_CreatesServiceAccounts(t *testing.T) {
 func TestRestReconciler_WorkflowConfigMapName(t *testing.T) {
 	s := testScheme()
 	ns := "carbide"
-	dep := newTestDeployment("test", "default", carbitev1alpha1.ProfileManagement)
+	dep := newTestDeployment("test", carbitev1alpha1.ProfileManagement)
 	dep.Spec.Core.Namespace = ns
 	dep.Spec.Infrastructure = &carbitev1alpha1.InfrastructureConfig{
 		Namespace:  ns,
@@ -677,7 +677,7 @@ func TestRestReconciler_WorkflowConfigMapName(t *testing.T) {
 func TestReconcile_Deletion_RemovesFinalizer(t *testing.T) {
 	s := testScheme()
 	now := metav1.Now()
-	dep := newTestDeployment("test-del", "default", carbitev1alpha1.ProfileManagement)
+	dep := newTestDeployment("test-del", carbitev1alpha1.ProfileManagement)
 	dep.Finalizers = []string{"carbide.nvidia.com/finalizer"}
 	dep.DeletionTimestamp = &now
 

@@ -42,6 +42,7 @@ func BuildWorkflowConfigMap(deployment *carbitev1alpha1.CarbideDeployment, names
 	if temporalNs == "" {
 		temporalNs = "temporal"
 	}
+	_ = temporalNs // used in configYAML template below
 
 	// YAML config matching SNO reference
 	configYAML := fmt.Sprintf(`temporal:

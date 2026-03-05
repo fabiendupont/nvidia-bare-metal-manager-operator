@@ -34,6 +34,11 @@ import (
 	"github.com/NVIDIA/bare-metal-manager-operator/internal/utils"
 )
 
+const (
+	restDefaultNamespace  = "carbide"
+	restTemporalNamespace = "temporal"
+)
+
 // RestReconciler reconciles REST tier components
 type RestReconciler struct {
 	client.Client
@@ -56,7 +61,7 @@ func (r *RestReconciler) Reconcile(ctx context.Context, deployment *carbitev1alp
 
 	namespace := deployment.Spec.Core.Namespace
 	if namespace == "" {
-		namespace = "carbide"
+		namespace = restDefaultNamespace
 	}
 
 	// Initialize tier status
@@ -102,7 +107,7 @@ func (r *RestReconciler) Reconcile(ctx context.Context, deployment *carbitev1alp
 		// Temporal ClusterSPIFFEID with DNS SANs
 		temporalNs := deployment.Spec.Rest.Temporal.Namespace
 		if temporalNs == "" {
-			temporalNs = "temporal"
+			temporalNs = restTemporalNamespace
 		}
 		temporalSID := tls.BuildClusterSPIFFEID(deployment, "temporal", temporalNs, "temporal",
 			[]string{
@@ -206,7 +211,7 @@ func (r *RestReconciler) Reconcile(ctx context.Context, deployment *carbitev1alp
 	}
 
 	// 5. Workers (after Temporal is ready)
-	var cloudWorkerReady, siteWorkerReady bool = true, true
+	cloudWorkerReady, siteWorkerReady := true, true
 	if temporalReady && temporalSetupReady {
 		var cwErr, swErr error
 		cloudWorkerReady, cwErr = r.reconcileWorker(ctx, deployment, namespace, restresources.CloudWorkerName)
@@ -235,7 +240,7 @@ func (r *RestReconciler) Reconcile(ctx context.Context, deployment *carbitev1alp
 	}
 
 	// 6. Site Manager (for management profiles only, after REST API is ready)
-	var siteManagerReady bool = true
+	siteManagerReady := true
 	if (deployment.Spec.Profile == carbitev1alpha1.ProfileManagement ||
 		deployment.Spec.Profile == carbitev1alpha1.ProfileManagementWithSite) && restAPIReady {
 		var siteManagerErr error
@@ -253,7 +258,7 @@ func (r *RestReconciler) Reconcile(ctx context.Context, deployment *carbitev1alp
 	}
 
 	// 7. Site Agent (optional, only if enabled and REST API is ready)
-	var siteAgentReady bool = true
+	siteAgentReady := true
 	if restConfig.SiteAgent != nil && restConfig.SiteAgent.Enabled && restAPIReady {
 		var siteAgentErr error
 		siteAgentReady, siteAgentErr = r.reconcileSiteAgent(ctx, deployment, namespace)
@@ -355,7 +360,7 @@ func (r *RestReconciler) reconcileManagedTemporal(ctx context.Context, deploymen
 }
 
 // reconcileExternalTemporal validates external Temporal connectivity
-func (r *RestReconciler) reconcileExternalTemporal(ctx context.Context, deployment *carbitev1alpha1.CarbideDeployment, namespace string, config *carbitev1alpha1.TemporalConfig) (bool, error) {
+func (r *RestReconciler) reconcileExternalTemporal(ctx context.Context, _ *carbitev1alpha1.CarbideDeployment, _ string, config *carbitev1alpha1.TemporalConfig) (bool, error) {
 	logger := log.FromContext(ctx).WithValues("mode", "external")
 	logger.Info("Validating external Temporal")
 
@@ -395,7 +400,7 @@ func (r *RestReconciler) reconcileKeycloak(ctx context.Context, deployment *carb
 }
 
 // reconcileManagedKeycloak reconciles managed Keycloak
-func (r *RestReconciler) reconcileManagedKeycloak(ctx context.Context, deployment *carbitev1alpha1.CarbideDeployment, namespace string, config *carbitev1alpha1.KeycloakConfig) (bool, error) {
+func (r *RestReconciler) reconcileManagedKeycloak(ctx context.Context, deployment *carbitev1alpha1.CarbideDeployment, namespace string, _ *carbitev1alpha1.KeycloakConfig) (bool, error) {
 	logger := log.FromContext(ctx).WithValues("mode", "managed")
 	logger.Info("Reconciling managed Keycloak")
 
@@ -434,7 +439,7 @@ func (r *RestReconciler) reconcileManagedKeycloak(ctx context.Context, deploymen
 }
 
 // reconcileExternalKeycloak validates external auth providers
-func (r *RestReconciler) reconcileExternalKeycloak(ctx context.Context, deployment *carbitev1alpha1.CarbideDeployment, namespace string, config *carbitev1alpha1.KeycloakConfig) (bool, error) {
+func (r *RestReconciler) reconcileExternalKeycloak(ctx context.Context, _ *carbitev1alpha1.CarbideDeployment, namespace string, config *carbitev1alpha1.KeycloakConfig) (bool, error) {
 	logger := log.FromContext(ctx).WithValues("mode", "external")
 	logger.Info("Validating external auth providers")
 
@@ -654,7 +659,7 @@ func (r *RestReconciler) failedStatus(message string, err error) *carbitev1alpha
 }
 
 // getPostgreSQLConnection retrieves PostgreSQL connection details
-func (r *RestReconciler) getPostgreSQLConnection(ctx context.Context, deployment *carbitev1alpha1.CarbideDeployment) (host string, port int32, secretName string, err error) {
+func (r *RestReconciler) getPostgreSQLConnection(_ context.Context, deployment *carbitev1alpha1.CarbideDeployment) (host string, port int32, secretName string, err error) {
 	infraConfig := deployment.Spec.Infrastructure
 	if infraConfig == nil {
 		return "", 0, "", fmt.Errorf("infrastructure config is nil")
@@ -682,7 +687,7 @@ func (r *RestReconciler) getPostgreSQLConnection(ctx context.Context, deployment
 
 	infraNamespace := infraConfig.Namespace
 	if infraNamespace == "" {
-		infraNamespace = "carbide-operators"
+		infraNamespace = restDefaultNamespace
 	}
 
 	host = fmt.Sprintf("carbide-postgres-primary.%s.svc", infraNamespace)
@@ -730,7 +735,7 @@ func (r *RestReconciler) getForgePassword(ctx context.Context, deployment *carbi
 
 	infraNamespace := infraConfig.Namespace
 	if infraNamespace == "" {
-		infraNamespace = "carbide-operators"
+		infraNamespace = restDefaultNamespace
 	}
 
 	secret := &corev1.Secret{}
@@ -790,7 +795,7 @@ func (r *RestReconciler) createOrUpdate(ctx context.Context, obj client.Object) 
 }
 
 // getTemporalEndpoint retrieves the Temporal endpoint based on managed/external mode
-func (r *RestReconciler) getTemporalEndpoint(ctx context.Context, deployment *carbitev1alpha1.CarbideDeployment) string {
+func (r *RestReconciler) getTemporalEndpoint(_ context.Context, deployment *carbitev1alpha1.CarbideDeployment) string {
 	temporalConfig := deployment.Spec.Rest.Temporal
 
 	mode := temporalConfig.Mode
@@ -804,14 +809,14 @@ func (r *RestReconciler) getTemporalEndpoint(ctx context.Context, deployment *ca
 
 	namespace := temporalConfig.Namespace
 	if namespace == "" {
-		namespace = "temporal"
+		namespace = restTemporalNamespace
 	}
 
 	return restresources.GetTemporalFrontendURL(namespace)
 }
 
 // getKeycloakEndpoint retrieves the Keycloak endpoint based on mode
-func (r *RestReconciler) getKeycloakEndpoint(ctx context.Context, deployment *carbitev1alpha1.CarbideDeployment) string {
+func (r *RestReconciler) getKeycloakEndpoint(_ context.Context, deployment *carbitev1alpha1.CarbideDeployment) string {
 	keycloakConfig := deployment.Spec.Rest.Keycloak
 
 	switch keycloakConfig.Mode {
@@ -827,7 +832,7 @@ func (r *RestReconciler) getKeycloakEndpoint(ctx context.Context, deployment *ca
 		// Managed mode
 		coreNamespace := deployment.Spec.Core.Namespace
 		if coreNamespace == "" {
-			coreNamespace = "carbide"
+			coreNamespace = restDefaultNamespace
 		}
 		return fmt.Sprintf("http://carbide-keycloak.%s.svc:8080/auth", coreNamespace)
 	}

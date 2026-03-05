@@ -37,7 +37,7 @@ func ValidateOperatorInstalled(ctx context.Context, c client.Client, crdName str
 // ValidatePostgresOperator checks if the Crunchy PostgreSQL operator is installed
 func ValidatePostgresOperator(ctx context.Context, c client.Client) error {
 	if err := ValidateOperatorInstalled(ctx, c, "postgresclusters.postgres-operator.crunchydata.com"); err != nil {
-		return fmt.Errorf("Crunchy PostgreSQL operator not installed: %w\n"+
+		return fmt.Errorf("crunchy PostgreSQL operator not installed: %w\n"+
 			"Install from: https://access.crunchydata.com/documentation/postgres-operator/latest/installation/", err)
 	}
 	return nil
@@ -47,13 +47,13 @@ func ValidatePostgresOperator(ctx context.Context, c client.Client) error {
 func ValidateKeycloakOperator(ctx context.Context, c client.Client) error {
 	// Check for the Keycloak CRD first
 	if err := ValidateOperatorInstalled(ctx, c, "keycloaks.k8s.keycloak.org"); err != nil {
-		return fmt.Errorf("Red Hat Build of Keycloak operator not installed: %w\n"+
+		return fmt.Errorf("keycloak operator not installed: %w\n"+
 			"Install from OperatorHub or: https://www.keycloak.org/operator/installation", err)
 	}
 
 	// Also check for KeycloakRealmImport CRD
 	if err := ValidateOperatorInstalled(ctx, c, "keycloakrealmimports.k8s.keycloak.org"); err != nil {
-		return fmt.Errorf("Keycloak operator CRD keycloakrealmimports not found: %w", err)
+		return fmt.Errorf("keycloak operator CRD keycloakrealmimports not found: %w", err)
 	}
 
 	return nil

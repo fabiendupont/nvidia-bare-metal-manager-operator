@@ -132,7 +132,7 @@ func (r *InfrastructureReconciler) reconcilePostgreSQL(ctx context.Context, depl
 }
 
 // reconcileManagedPostgreSQL reconciles managed PostgreSQL
-func (r *InfrastructureReconciler) reconcileManagedPostgreSQL(ctx context.Context, deployment *carbitev1alpha1.CarbideDeployment, namespace string, config *carbitev1alpha1.PostgreSQLConfig) (bool, error) {
+func (r *InfrastructureReconciler) reconcileManagedPostgreSQL(ctx context.Context, deployment *carbitev1alpha1.CarbideDeployment, namespace string, _ *carbitev1alpha1.PostgreSQLConfig) (bool, error) {
 	logger := log.FromContext(ctx).WithValues("mode", "managed")
 	logger.Info("Reconciling managed PostgreSQL")
 
@@ -173,7 +173,7 @@ func (r *InfrastructureReconciler) reconcileManagedPostgreSQL(ctx context.Contex
 }
 
 // reconcileExternalPostgreSQL validates external PostgreSQL connectivity
-func (r *InfrastructureReconciler) reconcileExternalPostgreSQL(ctx context.Context, deployment *carbitev1alpha1.CarbideDeployment, namespace string, config *carbitev1alpha1.PostgreSQLConfig) (bool, error) {
+func (r *InfrastructureReconciler) reconcileExternalPostgreSQL(ctx context.Context, _ *carbitev1alpha1.CarbideDeployment, namespace string, config *carbitev1alpha1.PostgreSQLConfig) (bool, error) {
 	logger := log.FromContext(ctx).WithValues("mode", "external")
 	logger.Info("Validating external PostgreSQL")
 

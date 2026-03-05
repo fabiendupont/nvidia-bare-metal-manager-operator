@@ -35,6 +35,7 @@ import (
 )
 
 // CoreReconciler reconciles core tier components
+
 type CoreReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
@@ -63,7 +64,7 @@ func (r *CoreReconciler) Reconcile(ctx context.Context, deployment *carbitev1alp
 		if deployment.Spec.Infrastructure != nil && deployment.Spec.Infrastructure.Namespace != "" {
 			namespace = deployment.Spec.Infrastructure.Namespace
 		} else {
-			namespace = "carbide"
+			namespace = restDefaultNamespace
 		}
 	}
 
@@ -525,7 +526,7 @@ func (r *CoreReconciler) reconcileVault(ctx context.Context, deployment *carbite
 				return false, err
 			}
 			if !available {
-				return false, fmt.Errorf("Vault token secret %s not found", vaultConfig.TokenSecretRef.Name)
+				return false, fmt.Errorf("vault token secret %s not found", vaultConfig.TokenSecretRef.Name)
 			}
 		}
 		return true, nil
@@ -638,7 +639,7 @@ func (r *CoreReconciler) failedStatus(message string, err error) *carbitev1alpha
 }
 
 // getInfrastructureConnections retrieves connection details from infrastructure tier
-func (r *CoreReconciler) getInfrastructureConnections(ctx context.Context, deployment *carbitev1alpha1.CarbideDeployment) (pgHost string, pgPort int32, err error) {
+func (r *CoreReconciler) getInfrastructureConnections(_ context.Context, deployment *carbitev1alpha1.CarbideDeployment) (pgHost string, pgPort int32, err error) {
 	infraConfig := deployment.Spec.Infrastructure
 	if infraConfig == nil {
 		return "", 0, fmt.Errorf("infrastructure config is nil")
@@ -646,7 +647,7 @@ func (r *CoreReconciler) getInfrastructureConnections(ctx context.Context, deplo
 
 	infraNamespace := infraConfig.Namespace
 	if infraNamespace == "" {
-		infraNamespace = "carbide-operators"
+		infraNamespace = restDefaultNamespace
 	}
 
 	pgConfig := infraConfig.PostgreSQL
@@ -708,7 +709,7 @@ func (r *CoreReconciler) getPostgreSQLPassword(ctx context.Context, deployment *
 	// Managed PostgreSQL: read from PGO-managed secret
 	infraNamespace := infraConfig.Namespace
 	if infraNamespace == "" {
-		infraNamespace = "carbide-operators"
+		infraNamespace = restDefaultNamespace
 	}
 
 	secretName := "carbide-postgres-pguser-carbide"

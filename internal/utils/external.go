@@ -93,7 +93,7 @@ func ValidateExternalPostgreSQL(ctx context.Context, c client.Client, namespace 
 			if err != nil {
 				return fmt.Errorf("failed to open PostgreSQL connection: %w", err)
 			}
-			defer db.Close()
+			defer db.Close() //nolint:errcheck
 
 			testCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 			defer cancel()
@@ -115,7 +115,7 @@ func ValidateExternalPostgreSQL(ctx context.Context, c client.Client, namespace 
 	if err != nil {
 		return fmt.Errorf("failed to connect to PostgreSQL at %s:%d: %w", config.Host, port, err)
 	}
-	conn.Close()
+	conn.Close() //nolint:errcheck
 
 	return nil
 }
@@ -123,7 +123,7 @@ func ValidateExternalPostgreSQL(ctx context.Context, c client.Client, namespace 
 // ValidateExternalTemporal validates connectivity to an external Temporal instance
 func ValidateExternalTemporal(ctx context.Context, endpoint string) error {
 	if endpoint == "" {
-		return fmt.Errorf("Temporal endpoint is empty")
+		return fmt.Errorf("temporal endpoint is empty")
 	}
 
 	// Parse endpoint to get host and port
@@ -141,7 +141,7 @@ func ValidateExternalTemporal(ctx context.Context, endpoint string) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to Temporal at %s: %w", endpoint, err)
 	}
-	conn.Close()
+	conn.Close() //nolint:errcheck
 
 	return nil
 }
@@ -149,10 +149,10 @@ func ValidateExternalTemporal(ctx context.Context, endpoint string) error {
 // ValidateExternalKeycloak validates connectivity to an external Keycloak instance
 func ValidateExternalKeycloak(ctx context.Context, c client.Client, namespace, endpoint, realm string, clientSecretRef *carbitev1alpha1.SecretRef) error {
 	if endpoint == "" {
-		return fmt.Errorf("Keycloak endpoint is empty")
+		return fmt.Errorf("keycloak endpoint is empty")
 	}
 	if realm == "" {
-		return fmt.Errorf("Keycloak realm is empty")
+		return fmt.Errorf("keycloak realm is empty")
 	}
 
 	// If client secret is provided, validate it exists
@@ -176,7 +176,7 @@ func ValidateExternalKeycloak(ctx context.Context, c client.Client, namespace, e
 	}
 
 	// Test connectivity to Keycloak
-	client := &http.Client{
+	httpClient := &http.Client{
 		Timeout: 10 * time.Second,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse // Don't follow redirects
@@ -190,14 +190,14 @@ func ValidateExternalKeycloak(ctx context.Context, c client.Client, namespace, e
 		return fmt.Errorf("failed to create Keycloak realm check request: %w", err)
 	}
 
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to connect to Keycloak at %s: %w", endpoint, err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("Keycloak realm %q not accessible at %s (status: %d)", realm, endpoint, resp.StatusCode)
+		return fmt.Errorf("keycloak realm %q not accessible at %s (status: %d)", realm, endpoint, resp.StatusCode)
 	}
 
 	return nil

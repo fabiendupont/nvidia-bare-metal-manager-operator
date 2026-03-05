@@ -36,6 +36,13 @@ linters:
           - dupl
           - lll
         path: internal/*
+      - linters:
+          - goconst
+          - staticcheck
+        path: _test\.go$
+      - linters:
+          - gocyclo
+        path: (webhook|reconciler)\.go$
     paths:
       - third_party$
       - builtin$

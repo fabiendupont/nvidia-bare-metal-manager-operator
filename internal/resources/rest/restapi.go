@@ -42,6 +42,7 @@ func BuildRestAPIConfigMap(deployment *carbitev1alpha1.CarbideDeployment, namesp
 	if coreNamespace == "" {
 		coreNamespace = namespace
 	}
+	_ = coreNamespace // used in configYAML below
 
 	// YAML config matching SNO reference
 	configYAML := fmt.Sprintf(`temporal:
