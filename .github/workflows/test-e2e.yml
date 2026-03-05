@@ -4,6 +4,11 @@ on:
   pull_request:
   workflow_dispatch:
 
+env:
+  IMG: localhost/nvidia-carbide-operator:e2e
+  DOCKERFILE: Dockerfile.ci
+  CERT_MANAGER_INSTALL_SKIP: "true"
+
 jobs:
   test-e2e:
     name: Run on Ubuntu
@@ -23,23 +28,7 @@ jobs:
           chmod +x ./kind
           sudo mv ./kind /usr/local/bin/kind
 
-      - name: Build operator image
-        run: |
-          make docker-build IMG=localhost/nvidia-carbide-operator:e2e \
-            DOCKERFILE=Dockerfile.ci
-
-      - name: Create Kind cluster and load image
-        run: |
-          kind create cluster --name carbide-operator-test-e2e
-          kind load docker-image localhost/nvidia-carbide-operator:e2e \
-            --name carbide-operator-test-e2e
-
       - name: Run E2E tests
         run: |
-          KIND_CLUSTER=carbide-operator-test-e2e \
-          IMG=localhost/nvidia-carbide-operator:e2e \
-            go test -tags=e2e ./test/e2e/ -v -ginkgo.v -timeout 10m
-
-      - name: Cleanup
-        if: always()
-        run: kind delete cluster --name carbide-operator-test-e2e
+          go mod tidy
+          make test-e2e

@@ -40,9 +40,10 @@ var (
 	// isCertManagerAlreadyInstalled will be set true when CertManager CRDs be found on the cluster
 	isCertManagerAlreadyInstalled = false
 
-	// projectImage is the name of the image which will be build and loaded
+	// projectImage is the name of the image which will be built and loaded
 	// with the code source changes to be tested.
-	projectImage = "example.com/carbide-operator:v0.0.1"
+	// Override with IMG env var in CI (e.g. IMG=localhost/nvidia-carbide-operator:e2e).
+	projectImage = getEnvOrDefault("IMG", "localhost/nvidia-carbide-operator:e2e")
 )
 
 // TestE2E runs the end-to-end (e2e) test suite for the project. These tests execute in an isolated,
@@ -57,7 +58,11 @@ func TestE2E(t *testing.T) {
 
 var _ = BeforeSuite(func() {
 	By("building the manager(Operator) image")
-	cmd := exec.Command("make", "docker-build", fmt.Sprintf("IMG=%s", projectImage))
+	// Use Dockerfile.ci for CI builds (no Red Hat subscription needed for UBI-STIG).
+	dockerfile := getEnvOrDefault("DOCKERFILE", "Dockerfile.ci")
+	cmd := exec.Command("make", "docker-build",
+		fmt.Sprintf("IMG=%s", projectImage),
+		fmt.Sprintf("DOCKERFILE=%s", dockerfile))
 	_, err := utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the manager(Operator) image")
 
@@ -82,6 +87,13 @@ var _ = BeforeSuite(func() {
 		}
 	}
 })
+
+func getEnvOrDefault(key, defaultValue string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return defaultValue
+}
 
 var _ = AfterSuite(func() {
 	// Teardown CertManager after the suite if not skipped and if it was not already installed

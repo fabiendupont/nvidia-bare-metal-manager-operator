@@ -8,7 +8,7 @@ metadata:
           "apiVersion": "carbide.nvidia.com/v1alpha1",
           "kind": "CarbideDeployment",
           "metadata": {
-            "name": "bmm-minimal",
+            "name": "carbide-minimal",
             "namespace": "default"
           },
           "spec": {
