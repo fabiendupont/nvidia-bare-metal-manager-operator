@@ -277,6 +277,11 @@ spec:
 		"-n", "nvidia-carbide", "--timeout=180s")
 	_, err = utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Controller manager did not become ready in time")
+
+	By("waiting for webhook server to start serving")
+	// The webhook server starts after the cert secret is mounted.
+	// Give it time to detect the cert files and begin serving.
+	time.Sleep(15 * time.Second)
 })
 
 var _ = AfterSuite(func() {
