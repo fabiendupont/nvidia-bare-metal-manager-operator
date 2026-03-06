@@ -277,17 +277,22 @@ spec:
 	_, err = utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "webhook-server-cert secret not found after certificate Ready")
 
-	By("restarting the controller-manager to pick up the webhook cert")
-	cmd = exec.Command("kubectl", "rollout", "restart",
-		"deployment/controller-manager", "-n", "nvidia-carbide")
+	By("deleting the controller-manager pod to pick up the webhook cert")
+	// Delete the existing pod so a new one starts with the cert secret mounted.
+	// Using pod deletion instead of rollout restart for a clean restart.
+	cmd = exec.Command("kubectl", "delete", "pod", "-l", "control-plane=controller-manager",
+		"-n", "nvidia-carbide", "--wait=true")
 	_, err = utils.Run(cmd)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to restart controller-manager")
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to delete controller-manager pod")
 
-	By("waiting for the controller-manager pod to be ready")
-	cmd = exec.Command("kubectl", "rollout", "status",
+	By("waiting for the controller-manager to be ready with webhook cert")
+	cmd = exec.Command("kubectl", "wait", "--for=condition=Available",
 		"deployment/controller-manager", "-n", "nvidia-carbide", "--timeout=120s")
 	_, err = utils.Run(cmd)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Controller manager did not become ready in time")
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Controller manager did not become ready after restart")
+
+	By("giving the webhook server time to start")
+	time.Sleep(5 * time.Second)
 })
 
 var _ = AfterSuite(func() {
