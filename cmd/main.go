@@ -190,6 +190,7 @@ func main() {
 		setupLog.Error(err, "unable to create webhook", "webhook", "CarbideDeployment")
 		os.Exit(1)
 	}
+	setupLog.Info("webhook registered successfully")
 	// +kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
