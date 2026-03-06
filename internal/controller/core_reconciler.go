@@ -30,6 +30,7 @@ import (
 
 	carbitev1alpha1 "github.com/NVIDIA/bare-metal-manager-operator/api/v1alpha1"
 	"github.com/NVIDIA/bare-metal-manager-operator/internal/resources/core"
+	"github.com/NVIDIA/bare-metal-manager-operator/internal/resources/infrastructure"
 	"github.com/NVIDIA/bare-metal-manager-operator/internal/resources/tls"
 	"github.com/NVIDIA/bare-metal-manager-operator/internal/utils"
 )
@@ -712,7 +713,7 @@ func (r *CoreReconciler) getPostgreSQLPassword(ctx context.Context, deployment *
 		infraNamespace = restDefaultNamespace
 	}
 
-	secretName := "carbide-postgres-pguser-carbide"
+	secretName := infrastructure.GetPostgreSQLConnectionSecret("carbide")
 	secret := &corev1.Secret{}
 	if err := r.Get(ctx, client.ObjectKey{
 		Namespace: infraNamespace,

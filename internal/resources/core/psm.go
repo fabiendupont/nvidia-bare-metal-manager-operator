@@ -28,6 +28,7 @@ import (
 
 	carbitev1alpha1 "github.com/NVIDIA/bare-metal-manager-operator/api/v1alpha1"
 	"github.com/NVIDIA/bare-metal-manager-operator/internal/resources"
+	"github.com/NVIDIA/bare-metal-manager-operator/internal/resources/infrastructure"
 	"github.com/NVIDIA/bare-metal-manager-operator/internal/resources/tls"
 )
 
@@ -75,7 +76,7 @@ func BuildPSMDeployment(deployment *carbitev1alpha1.CarbideDeployment, namespace
 		res = *psmConfig.Resources
 	}
 
-	pgSecretName := "carbide-postgres-pguser-psm"
+	pgSecretName := infrastructure.ResolveUserSecret(deployment, "psm")
 
 	env := []corev1.EnvVar{
 		{Name: "DB_ADDR", ValueFrom: secretKeyRef(pgSecretName, "host")},

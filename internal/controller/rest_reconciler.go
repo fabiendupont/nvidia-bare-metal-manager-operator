@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	carbitev1alpha1 "github.com/NVIDIA/bare-metal-manager-operator/api/v1alpha1"
+	"github.com/NVIDIA/bare-metal-manager-operator/internal/resources/infrastructure"
 	restresources "github.com/NVIDIA/bare-metal-manager-operator/internal/resources/rest"
 	"github.com/NVIDIA/bare-metal-manager-operator/internal/resources/tls"
 	"github.com/NVIDIA/bare-metal-manager-operator/internal/utils"
@@ -692,7 +693,7 @@ func (r *RestReconciler) getPostgreSQLConnection(_ context.Context, deployment *
 
 	host = fmt.Sprintf("carbide-postgres-primary.%s.svc", infraNamespace)
 	port = 5432
-	secretName = "carbide-postgres-pguser-temporal"
+	secretName = infrastructure.GetPostgreSQLConnectionSecret("temporal")
 
 	return host, port, secretName, nil
 }
@@ -741,7 +742,7 @@ func (r *RestReconciler) getForgePassword(ctx context.Context, deployment *carbi
 	secret := &corev1.Secret{}
 	if err := r.Get(ctx, client.ObjectKey{
 		Namespace: infraNamespace,
-		Name:      "carbide-postgres-pguser-forge",
+		Name:      infrastructure.GetPostgreSQLConnectionSecret("forge"),
 	}, secret); err != nil {
 		return "", fmt.Errorf("failed to get forge PostgreSQL secret: %w", err)
 	}

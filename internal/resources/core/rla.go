@@ -28,6 +28,7 @@ import (
 
 	carbitev1alpha1 "github.com/NVIDIA/bare-metal-manager-operator/api/v1alpha1"
 	"github.com/NVIDIA/bare-metal-manager-operator/internal/resources"
+	"github.com/NVIDIA/bare-metal-manager-operator/internal/resources/infrastructure"
 	"github.com/NVIDIA/bare-metal-manager-operator/internal/resources/tls"
 )
 
@@ -80,7 +81,7 @@ func BuildRLADeployment(deployment *carbitev1alpha1.CarbideDeployment, namespace
 		apiPort = 1079
 	}
 
-	pgSecretName := "carbide-postgres-pguser-rla"
+	pgSecretName := infrastructure.ResolveUserSecret(deployment, "rla")
 
 	env := []corev1.EnvVar{
 		{Name: "DB_ADDR", ValueFrom: secretKeyRef(pgSecretName, "host")},

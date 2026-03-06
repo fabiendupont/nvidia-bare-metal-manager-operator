@@ -163,6 +163,21 @@ func GetPostgreSQLConnectionSecret(username string) string {
 	return fmt.Sprintf("%s-pguser-%s", PostgreSQLClusterName, username)
 }
 
+// ResolveUserSecret returns the secret name for a given database user.
+// In external mode, it looks up the secret from the userSecrets map.
+// In managed mode, it uses the PGO convention: carbide-postgres-pguser-{user}.
+func ResolveUserSecret(deployment *carbitev1alpha1.CarbideDeployment, username string) string {
+	if deployment.Spec.Infrastructure != nil &&
+		deployment.Spec.Infrastructure.PostgreSQL.Mode == carbitev1alpha1.ExternalMode &&
+		deployment.Spec.Infrastructure.PostgreSQL.Connection != nil &&
+		deployment.Spec.Infrastructure.PostgreSQL.Connection.UserSecrets != nil {
+		if ref, ok := deployment.Spec.Infrastructure.PostgreSQL.Connection.UserSecrets[username]; ok {
+			return ref.Name
+		}
+	}
+	return GetPostgreSQLConnectionSecret(username)
+}
+
 // BuildPostgreSQLConnectionInfo creates a ConfigMap with PostgreSQL connection info
 func BuildPostgreSQLConnectionInfo(deployment *carbitev1alpha1.CarbideDeployment, namespace, host string, port int32) *corev1.ConfigMap {
 	if port == 0 {
