@@ -88,6 +88,13 @@ setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
 		echo "Kind is not installed. Please install Kind manually."; \
 		exit 1; \
 	}
+	@# The Carbide stack requires at least 512 inotify instances for all its
+	@# pods (Temporal, cert-manager, SPIRE, webhook servers, etc.).
+	@if [ -f /proc/sys/fs/inotify/max_user_instances ] && \
+	   [ "$$(cat /proc/sys/fs/inotify/max_user_instances)" -lt 512 ]; then \
+		echo "WARNING: fs.inotify.max_user_instances is $$(cat /proc/sys/fs/inotify/max_user_instances), need at least 512"; \
+		echo "Run: sudo sysctl -w fs.inotify.max_user_instances=512"; \
+	fi
 	@case "$$($(KIND) get clusters)" in \
 		*"$(KIND_CLUSTER)"*) \
 			echo "Kind cluster '$(KIND_CLUSTER)' already exists. Skipping creation." ;; \
