@@ -1,0 +1,73 @@
+# Build carbide-api from bare-metal-manager-core source.
+# Lean build-only Dockerfile — no tests, no linting, no CI tools.
+# PostgreSQL is started during build for sqlx compile-time query validation.
+#
+# Build context must be the bare-metal-manager-core repo root:
+#   docker build -t carbide-api:e2e -f Dockerfile.carbide-api /path/to/bare-metal-manager-core
+
+# Match rust-toolchain.toml
+FROM rust:1.90.0-slim-bookworm AS builder
+
+# Build deps matching the upstream build container (minus CI tools)
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    automake \
+    build-essential \
+    clang \
+    cmake \
+    kea-dev \
+    libboost-dev \
+    libgrpc-dev \
+    libgrpc++-dev \
+    libopenipmi-dev \
+    libprotobuf-dev \
+    libssh-dev \
+    libssl-dev \
+    libtss2-dev \
+    libudev-dev \
+    libaio-dev \
+    lld \
+    pkg-config \
+    postgresql \
+    protobuf-compiler \
+    protobuf-compiler-grpc \
+    sudo \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up postgres for sqlx compile-time checks
+RUN /etc/init.d/postgresql start && \
+    su postgres -c "createuser -d -s root" && \
+    /etc/init.d/postgresql stop
+
+WORKDIR /carbide
+COPY . .
+
+# Build only carbide-api (release, no tests)
+RUN /etc/init.d/postgresql start && \
+    createdb root && \
+    export DATABASE_URL="postgresql://%2Fvar%2Frun%2Fpostgresql" && \
+    cargo build --release -p carbide-api --locked && \
+    /etc/init.d/postgresql stop
+
+# Runtime — minimal with only required shared libs
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    libssl3 \
+    libudev1 \
+    libssh-4 \
+    libtss2-esys-3.0.2-0 \
+    libtss2-mu0 \
+    libtss2-rc0 \
+    libtss2-tctildr0 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /carbide/target/release/carbide-api /opt/carbide/carbide-api
+COPY crates/api/casbin-policy.csv /opt/carbide/casbin-policy.csv
+COPY crates/api-db/migrations/ /opt/carbide/migrations/
+
+RUN mkdir -p /var/run/secrets/tls
+
+ENV CASBIN_POLICY_FILE=/opt/carbide/casbin-policy.csv
+EXPOSE 1079 1080
+USER 65532:65532
+ENTRYPOINT ["/opt/carbide/carbide-api"]

@@ -1143,6 +1143,307 @@ spec:
 			Eventually(verifySPIFFECondition, 2*time.Minute, 2*time.Second).Should(Succeed())
 		})
 	})
+
+	Context("Tier 2: services start with stub image", func() {
+		const tier2Namespace = "nvidia-carbide-e2e-tier2"
+		const tier2CRName = "e2e-tier2-site"
+
+		BeforeEach(func() {
+			By("creating the Tier 2 test namespace")
+			cmd := exec.Command("kubectl", "create", "ns", tier2Namespace)
+			_, _ = utils.Run(cmd)
+
+			By("ensuring the self-signed ClusterIssuer exists")
+			ensureClusterIssuer()
+
+			By("creating per-user PostgreSQL secrets")
+			createPGUserSecrets(tier2Namespace)
+		})
+
+		AfterEach(func() {
+			By("cleaning up the Tier 2 CarbideDeployment CR")
+			cmd := exec.Command("kubectl", "delete", "carbidedeployment", tier2CRName,
+				"-n", tier2Namespace, "--timeout=60s", "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+
+			By("cleaning up the Tier 2 test namespace")
+			cmd = exec.Command("kubectl", "delete", "ns", tier2Namespace,
+				"--timeout=60s", "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+		})
+
+		It("should deploy site services using stub image and become Available", func() {
+			By("applying a CarbideDeployment CR with stub image overrides")
+			cr := fmt.Sprintf(`apiVersion: carbide.nvidia.com/v1alpha1
+kind: CarbideDeployment
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  profile: site
+  version: "latest"
+  tls:
+    mode: certManager
+    certManager:
+      issuerRef:
+        name: carbide-e2e-selfsigned
+        kind: ClusterIssuer
+  network:
+    interface: eth0
+    ip: 10.0.0.1
+    adminNetworkCIDR: 10.0.0.0/24
+    domain: carbide.local
+  infrastructure:
+    namespace: %s
+    postgresql:
+      mode: external
+      connection:
+        host: postgres.postgres-e2e.svc
+        port: 5432
+        sslMode: disable
+        userSecrets:
+          carbide:
+            name: pg-carbide
+          forge:
+            name: pg-forge
+          rla:
+            name: pg-rla
+          psm:
+            name: pg-psm
+  images:
+    bmmCore: localhost/carbide-api:e2e
+    rla: localhost/carbide-rla:e2e
+    psm: localhost/carbide-psm:e2e
+    pullPolicy: Never
+  core:
+    namespace: %s
+    api:
+      port: 1079
+    dhcp:
+      enabled: false
+    dns:
+      enabled: false
+    pxe:
+      enabled: false
+    vault:
+      mode: managed
+    rla:
+      enabled: true
+    psm:
+      enabled: true
+`, tier2CRName, tier2Namespace, tier2Namespace, tier2Namespace)
+
+			crFile := filepath.Join("/tmp", "e2e-cr-tier2-site.yaml")
+			err := os.WriteFile(crFile, []byte(cr), 0o644)
+			Expect(err).NotTo(HaveOccurred())
+			defer os.Remove(crFile)
+
+			cmd := exec.Command("kubectl", "apply", "-f", crFile)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply Tier 2 CarbideDeployment CR")
+
+			By("waiting for Deployments to be created by the operator")
+			verifyDeploymentsExist := func(g Gomega) {
+				for _, deploy := range []string{"carbide-api", "carbide-rla", "carbide-psm"} {
+					cmd := exec.Command("kubectl", "get", "deployment", deploy,
+						"-n", tier2Namespace)
+					_, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred(),
+						"Deployment %s should exist", deploy)
+				}
+			}
+			Eventually(verifyDeploymentsExist, 2*time.Minute, 2*time.Second).Should(Succeed())
+
+			By("waiting for Deployments to become Available")
+			for _, deploy := range []string{"carbide-api", "carbide-rla", "carbide-psm"} {
+				cmd = exec.Command("kubectl", "wait", "--for=condition=Available",
+					fmt.Sprintf("deployment/%s", deploy),
+					"-n", tier2Namespace, "--timeout=120s")
+				_, err = utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred(),
+					"Deployment %s did not become Available", deploy)
+			}
+
+			By("verifying pod logs contain stub server startup message")
+			for _, label := range []string{"carbide-api", "carbide-rla", "carbide-psm"} {
+				verifyStubLogs := func(g Gomega) {
+					cmd := exec.Command("kubectl", "logs",
+						"-l", fmt.Sprintf("app=%s", label),
+						"-n", tier2Namespace, "--tail=50")
+					output, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(output).To(ContainSubstring("starting stub server"),
+						"Pod logs for %s should contain stub startup message", label)
+				}
+				Eventually(verifyStubLogs, 30*time.Second, 2*time.Second).Should(Succeed())
+			}
+
+			By("verifying status conditions are set")
+			verifyConditions := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "carbidedeployment", tier2CRName,
+					"-n", tier2Namespace,
+					"-o", "jsonpath={.status.conditions[*].type}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).NotTo(BeEmpty(), "status.conditions should be set")
+			}
+			Eventually(verifyConditions, 60*time.Second, 2*time.Second).Should(Succeed())
+		})
+	})
+
+	Context("Tier 2: management with Keycloak and stub REST API", func() {
+		const tier2MgmtNamespace = "nvidia-carbide-e2e-tier2-mgmt"
+		const tier2MgmtCRName = "e2e-tier2-mgmt"
+
+		BeforeEach(func() {
+			By("creating the Tier 2 management test namespace")
+			cmd := exec.Command("kubectl", "create", "ns", tier2MgmtNamespace)
+			_, _ = utils.Run(cmd)
+
+			By("ensuring the self-signed ClusterIssuer exists")
+			ensureClusterIssuer()
+
+			By("creating per-user PostgreSQL secrets")
+			createPGUserSecrets(tier2MgmtNamespace)
+		})
+
+		AfterEach(func() {
+			By("cleaning up the Tier 2 management CarbideDeployment CR")
+			cmd := exec.Command("kubectl", "delete", "carbidedeployment", tier2MgmtCRName,
+				"-n", tier2MgmtNamespace, "--timeout=60s", "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+
+			By("cleaning up the Tier 2 management test namespace")
+			cmd = exec.Command("kubectl", "delete", "ns", tier2MgmtNamespace,
+				"--timeout=60s", "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+		})
+
+		It("should deploy management profile with external Keycloak auth provider", func() {
+			By("applying a management-profile CarbideDeployment CR with external Keycloak")
+			cr := fmt.Sprintf(`apiVersion: carbide.nvidia.com/v1alpha1
+kind: CarbideDeployment
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  profile: management
+  version: "latest"
+  tls:
+    mode: certManager
+    certManager:
+      issuerRef:
+        name: carbide-e2e-selfsigned
+        kind: ClusterIssuer
+  network:
+    domain: carbide.local
+  infrastructure:
+    namespace: %s
+    postgresql:
+      mode: external
+      connection:
+        host: postgres.postgres-e2e.svc
+        port: 5432
+        sslMode: disable
+        userSecrets:
+          carbide:
+            name: pg-carbide
+          forge:
+            name: pg-forge
+          rla:
+            name: pg-rla
+          psm:
+            name: pg-psm
+  images:
+    restAPI: localhost/carbide-rest-api:e2e
+    workflow: localhost/carbide-rest-workflow:e2e
+    pullPolicy: Never
+  core:
+    namespace: %s
+    api:
+      port: 1079
+    dhcp:
+      enabled: false
+    dns:
+      enabled: false
+    pxe:
+      enabled: false
+  rest:
+    enabled: true
+    temporal:
+      mode: managed
+    keycloak:
+      mode: external
+      realm: master
+      authProviders:
+      - name: keycloak-e2e
+        issuerURL: http://keycloak.keycloak-e2e.svc:8080/realms/master
+        jwksURL: http://keycloak.keycloak-e2e.svc:8080/realms/master/protocol/openid-connect/certs
+        clientID: carbide-e2e
+    restAPI:
+      port: 8080
+`, tier2MgmtCRName, tier2MgmtNamespace, tier2MgmtNamespace, tier2MgmtNamespace)
+
+			crFile := filepath.Join("/tmp", "e2e-cr-tier2-mgmt.yaml")
+			err := os.WriteFile(crFile, []byte(cr), 0o644)
+			Expect(err).NotTo(HaveOccurred())
+			defer os.Remove(crFile)
+
+			cmd := exec.Command("kubectl", "apply", "-f", crFile)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply Tier 2 management CarbideDeployment CR")
+
+			By("waiting for reconciliation (finalizer exists)")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "carbidedeployment", tier2MgmtCRName,
+					"-n", tier2MgmtNamespace,
+					"-o", "jsonpath={.metadata.finalizers}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(ContainSubstring("carbide.nvidia.com/finalizer"))
+			}, 60*time.Second, 2*time.Second).Should(Succeed())
+
+			By("verifying status conditions are set")
+			verifyConditions := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "carbidedeployment", tier2MgmtCRName,
+					"-n", tier2MgmtNamespace,
+					"-o", "jsonpath={.status.conditions[*].type}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).NotTo(BeEmpty(), "status.conditions should be set")
+			}
+			Eventually(verifyConditions, 60*time.Second, 2*time.Second).Should(Succeed())
+
+			By("verifying the auth provider configuration is stored in the CR spec")
+			verifyAuthProvider := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "carbidedeployment", tier2MgmtCRName,
+					"-n", tier2MgmtNamespace,
+					"-o", "jsonpath={.spec.rest.keycloak.authProviders[0].issuerURL}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(ContainSubstring("keycloak.keycloak-e2e.svc"),
+					"auth provider issuerURL should point to Keycloak")
+			}
+			Eventually(verifyAuthProvider, 30*time.Second, 2*time.Second).Should(Succeed())
+
+			By("verifying observedGeneration matches generation")
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "carbidedeployment", tier2MgmtCRName,
+					"-n", tier2MgmtNamespace,
+					"-o", "jsonpath={.metadata.generation}")
+				generation, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(generation).NotTo(BeEmpty())
+
+				cmd = exec.Command("kubectl", "get", "carbidedeployment", tier2MgmtCRName,
+					"-n", tier2MgmtNamespace,
+					"-o", "jsonpath={.status.observedGeneration}")
+				observedGeneration, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(observedGeneration).To(Equal(generation))
+			}, 60*time.Second, 2*time.Second).Should(Succeed())
+		})
+	})
 })
 
 // serviceAccountToken returns a token for the specified service account in the given namespace.
@@ -1221,6 +1522,27 @@ stringData:
 		ExpectWithOffset(2, err).NotTo(HaveOccurred(),
 			fmt.Sprintf("Failed to create PG secret for user %s", user))
 	}
+}
+
+// ensureClusterIssuer creates or re-applies the self-signed ClusterIssuer
+// used by Tier 2 tests. This is idempotent and safe to call from multiple
+// BeforeEach blocks in case a prior test's AfterEach deleted it.
+func ensureClusterIssuer() {
+	issuerYAML := `apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: carbide-e2e-selfsigned
+spec:
+  selfSigned: {}
+`
+	issuerFile := filepath.Join("/tmp", "e2e-clusterissuer-ensure.yaml")
+	err := os.WriteFile(issuerFile, []byte(issuerYAML), 0o644)
+	ExpectWithOffset(2, err).NotTo(HaveOccurred())
+	defer os.Remove(issuerFile)
+
+	cmd := exec.Command("kubectl", "apply", "-f", issuerFile)
+	_, err = utils.Run(cmd)
+	ExpectWithOffset(2, err).NotTo(HaveOccurred(), "Failed to ensure ClusterIssuer exists")
 }
 
 // tokenRequest is a simplified representation of the Kubernetes TokenRequest API response,

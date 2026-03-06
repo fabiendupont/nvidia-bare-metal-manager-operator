@@ -159,6 +159,14 @@ spec:
 		_, _ = utils.Run(cmd)
 	}
 
+	By("building the stub image for Tier 2 tests")
+	cmd = exec.Command("make", "docker-build-stub", "E2E_REGISTRY=localhost E2E_IMAGE_TAG=e2e")
+	_, err = utils.Run(cmd)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build stub image")
+
+	err = utils.LoadImageToKindClusterWithName("localhost/carbide-stub:e2e")
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load stub image into Kind")
+
 	By("installing PGO CRDs (for PostgresCluster CR validation)")
 	cmd = exec.Command("kubectl", "apply", "--server-side", "-k",
 		"https://github.com/CrunchyData/postgres-operator//config/crd")
@@ -258,6 +266,94 @@ spec:
 	// Clean up test cert
 	cmd = exec.Command("kubectl", "delete", "-f", testCertFile, "--ignore-not-found")
 	_, _ = utils.Run(cmd)
+
+	By("creating a self-signed ClusterIssuer for Tier 2 tests")
+	clusterIssuerYAML := `apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: carbide-e2e-selfsigned
+spec:
+  selfSigned: {}
+`
+	clusterIssuerFile := filepath.Join("/tmp", "e2e-clusterissuer-beforesuite.yaml")
+	err = os.WriteFile(clusterIssuerFile, []byte(clusterIssuerYAML), 0o644)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred())
+	defer os.Remove(clusterIssuerFile)
+
+	cmd = exec.Command("kubectl", "apply", "-f", clusterIssuerFile)
+	_, err = utils.Run(cmd)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to create ClusterIssuer for Tier 2 tests")
+
+	By("deploying standalone Keycloak for E2E tests")
+	keycloakManifest := `
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: keycloak-e2e
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  namespace: keycloak-e2e
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      labels:
+        app: keycloak
+    spec:
+      containers:
+      - name: keycloak
+        image: quay.io/keycloak/keycloak:latest
+        command: ["start-dev"]
+        env:
+        - name: KEYCLOAK_ADMIN
+          value: admin
+        - name: KEYCLOAK_ADMIN_PASSWORD
+          value: admin
+        - name: KC_HTTP_PORT
+          value: "8080"
+        - name: KC_HOSTNAME_STRICT
+          value: "false"
+        ports:
+        - containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /realms/master
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  namespace: keycloak-e2e
+spec:
+  selector:
+    app: keycloak
+  ports:
+  - port: 8080
+    targetPort: 8080
+`
+	keycloakFile := filepath.Join("/tmp", "e2e-keycloak.yaml")
+	err = os.WriteFile(keycloakFile, []byte(keycloakManifest), 0o644)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred())
+	defer os.Remove(keycloakFile)
+
+	cmd = exec.Command("kubectl", "apply", "-f", keycloakFile)
+	_, err = utils.Run(cmd)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to deploy Keycloak")
+
+	By("waiting for Keycloak to be ready")
+	cmd = exec.Command("kubectl", "wait", "--for=condition=Available",
+		"deployment/keycloak", "-n", "keycloak-e2e", "--timeout=180s")
+	_, err = utils.Run(cmd)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Keycloak not ready in time")
 
 	By("deploying the controller-manager")
 	cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))

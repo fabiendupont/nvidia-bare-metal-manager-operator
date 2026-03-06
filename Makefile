@@ -155,6 +155,48 @@ STUB_IMG ?= localhost/carbide-stub:e2e
 docker-build-stub: ## Build stub image for E2E testing.
 	$(CONTAINER_TOOL) build -t $(STUB_IMG) -f test/stub/Dockerfile .
 
+# Build real Carbide service images from bare-metal-manager-rest source.
+# REST_REPO_PATH defaults to a sibling directory; override for CI.
+CORE_REPO_PATH ?= $(shell cd .. && pwd)/carbide/bare-metal-manager-core
+REST_REPO_PATH ?= $(shell cd .. && pwd)/carbide/bare-metal-manager-rest
+E2E_IMAGE_TAG ?= e2e
+E2E_REGISTRY ?= localhost
+# Set to a remote registry (e.g. ghcr.io/nvidia) to enable caching
+E2E_CACHE_REGISTRY ?= $(E2E_REGISTRY)
+
+.PHONY: docker-build-e2e-services
+docker-build-e2e-services: docker-build-e2e-core docker-build-e2e-rest ## Build all Carbide service images for E2E tests.
+
+.PHONY: docker-build-e2e-core
+docker-build-e2e-core: ## Build carbide-api from bare-metal-manager-core source.
+	@if [ ! -d "$(CORE_REPO_PATH)" ]; then \
+		echo "ERROR: bare-metal-manager-core not found at $(CORE_REPO_PATH)"; \
+		echo "Set CORE_REPO_PATH to the correct location."; \
+		exit 1; \
+	fi
+	$(CONTAINER_TOOL) build -t $(E2E_REGISTRY)/carbide-api:$(E2E_IMAGE_TAG) \
+		-f test/dockerfiles/Dockerfile.carbide-api "$(CORE_REPO_PATH)"
+
+.PHONY: docker-build-e2e-rest
+docker-build-e2e-rest: ## Build REST service images from bare-metal-manager-rest source.
+	@if [ ! -d "$(REST_REPO_PATH)" ]; then \
+		echo "ERROR: bare-metal-manager-rest not found at $(REST_REPO_PATH)"; \
+		echo "Set REST_REPO_PATH to the correct location."; \
+		exit 1; \
+	fi
+	cd "$(REST_REPO_PATH)" && $(CONTAINER_TOOL) build -t $(E2E_REGISTRY)/carbide-rla:$(E2E_IMAGE_TAG) \
+		-f docker/local/Dockerfile.carbide-rla .
+	cd "$(REST_REPO_PATH)" && $(CONTAINER_TOOL) build -t $(E2E_REGISTRY)/carbide-psm:$(E2E_IMAGE_TAG) \
+		-f docker/local/Dockerfile.carbide-psm .
+	cd "$(REST_REPO_PATH)" && $(CONTAINER_TOOL) build -t $(E2E_REGISTRY)/carbide-rest-api:$(E2E_IMAGE_TAG) \
+		-f docker/local/Dockerfile.carbide-rest-api .
+	cd "$(REST_REPO_PATH)" && $(CONTAINER_TOOL) build -t $(E2E_REGISTRY)/carbide-rest-workflow:$(E2E_IMAGE_TAG) \
+		-f docker/local/Dockerfile.carbide-rest-workflow .
+	cd "$(REST_REPO_PATH)" && $(CONTAINER_TOOL) build -t $(E2E_REGISTRY)/carbide-rest-site-manager:$(E2E_IMAGE_TAG) \
+		-f docker/local/Dockerfile.carbide-rest-site-manager .
+	cd "$(REST_REPO_PATH)" && $(CONTAINER_TOOL) build -t $(E2E_REGISTRY)/carbide-rest-db:$(E2E_IMAGE_TAG) \
+		-f docker/local/Dockerfile.carbide-rest-db .
+
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
 # - be able to use docker buildx. More info: https://docs.docker.com/build/buildx/
