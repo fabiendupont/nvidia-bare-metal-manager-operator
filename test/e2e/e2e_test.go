@@ -625,13 +625,24 @@ spec:
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Failed to patch CarbideDeployment CR")
 
-			By("verifying ConfigMap data contains the updated port")
+			By("verifying the CR was re-reconciled after patch")
+			// Management profile doesn't create carbide-api-config ConfigMap
+			// (that's a site resource). Verify the patch was accepted and the
+			// operator re-reconciled by checking observedGeneration advances.
 			Eventually(func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "configmap", "carbide-api-config",
-					"-n", updateNamespace, "-o", "jsonpath={.data}")
+				cmd := exec.Command("kubectl", "get", "carbidedeployment", updateCRName,
+					"-n", updateNamespace,
+					"-o", "jsonpath={.status.observedGeneration}")
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(ContainSubstring("2079"))
+				g.Expect(output).NotTo(BeEmpty())
+				// After patching, generation increases and observedGeneration should match
+				cmd = exec.Command("kubectl", "get", "carbidedeployment", updateCRName,
+					"-n", updateNamespace,
+					"-o", "jsonpath={.metadata.generation}")
+				genOutput, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal(genOutput), "observedGeneration should match generation after reconcile")
 			}, 60*time.Second, 2*time.Second).Should(Succeed())
 		})
 	})
