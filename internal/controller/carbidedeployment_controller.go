@@ -116,8 +116,9 @@ func (r *CarbideDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	if deployment.Status.Phase == "" {
 		conditions.InitializeConditions(deployment)
 		if err := r.Status().Update(ctx, deployment); err != nil {
-			logger.Error(err, "Failed to initialize status")
-			return ctrl.Result{}, err
+			// Conflict is expected on first reconcile — requeue and retry
+			logger.Info("Status init conflict, will retry", "error", err)
+			return ctrl.Result{Requeue: true}, nil
 		}
 		return ctrl.Result{Requeue: true}, nil
 	}
@@ -134,9 +135,13 @@ func (r *CarbideDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		if !tlsAvailable {
 			deployment.Status.Phase = carbitev1alpha1.PhaseFailed
 			conditions.SetReadyCondition(deployment)
-			if statusErr := r.Status().Update(ctx, deployment); statusErr != nil {
-				logger.Error(statusErr, "Failed to update status")
-				return ctrl.Result{}, statusErr
+			// Re-fetch to avoid conflict
+			latest := &carbitev1alpha1.CarbideDeployment{}
+			if getErr := r.Get(ctx, req.NamespacedName, latest); getErr == nil {
+				latest.Status = deployment.Status
+				if statusErr := r.Status().Update(ctx, latest); statusErr != nil {
+					logger.Info("Status update conflict on TLS check, will retry", "error", statusErr)
+				}
 			}
 			return ctrl.Result{RequeueAfter: requeueDelay}, nil
 		}
@@ -196,8 +201,15 @@ func (r *CarbideDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	// 8. Update overall conditions
 	conditions.SetReadyCondition(deployment)
 
-	// 9. Update status
-	if statusErr := r.Status().Update(ctx, deployment); statusErr != nil {
+	// 9. Update status — re-fetch to avoid conflict with concurrent modifications
+	// (e.g., webhook defaulting updates the object while we were reconciling)
+	latest := &carbitev1alpha1.CarbideDeployment{}
+	if statusErr := r.Get(ctx, req.NamespacedName, latest); statusErr != nil {
+		logger.Error(statusErr, "Failed to re-fetch for status update")
+		return ctrl.Result{}, statusErr
+	}
+	latest.Status = deployment.Status
+	if statusErr := r.Status().Update(ctx, latest); statusErr != nil {
 		logger.Error(statusErr, "Failed to update status")
 		return ctrl.Result{}, statusErr
 	}

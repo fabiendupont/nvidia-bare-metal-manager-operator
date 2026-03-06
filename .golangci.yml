@@ -42,7 +42,7 @@ linters:
         path: _test\.go$
       - linters:
           - gocyclo
-        path: (webhook|reconciler)\.go$
+        path: (webhook|reconciler|controller)\.go$
     paths:
       - third_party$
       - builtin$
