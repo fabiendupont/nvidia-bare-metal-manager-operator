@@ -271,10 +271,13 @@ spec:
 	_, err = utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Webhook certificate not ready in time")
 
+	By("verifying webhook-server-cert secret exists")
+	cmd = exec.Command("kubectl", "get", "secret", "webhook-server-cert",
+		"-n", "nvidia-carbide")
+	_, err = utils.Run(cmd)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "webhook-server-cert secret not found after certificate Ready")
+
 	By("restarting the controller-manager to pick up the webhook cert")
-	// The deployment and certificate are created simultaneously by make deploy.
-	// The pod may start before the cert secret exists, causing the webhook
-	// server to not bind. Restart the deployment after the cert is Ready.
 	cmd = exec.Command("kubectl", "rollout", "restart",
 		"deployment/controller-manager", "-n", "nvidia-carbide")
 	_, err = utils.Run(cmd)
