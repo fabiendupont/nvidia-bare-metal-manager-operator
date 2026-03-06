@@ -271,17 +271,20 @@ spec:
 	_, err = utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Webhook certificate not ready in time")
 
+	By("restarting the controller-manager to pick up the webhook cert")
+	// The deployment and certificate are created simultaneously by make deploy.
+	// The pod may start before the cert secret exists, causing the webhook
+	// server to not bind. Restart the deployment after the cert is Ready.
+	cmd = exec.Command("kubectl", "rollout", "restart",
+		"deployment/controller-manager", "-n", "nvidia-carbide")
+	_, err = utils.Run(cmd)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to restart controller-manager")
+
 	By("waiting for the controller-manager pod to be ready")
-	cmd = exec.Command("kubectl", "wait", "--for=condition=Available",
-		"deployment/controller-manager",
-		"-n", "nvidia-carbide", "--timeout=180s")
+	cmd = exec.Command("kubectl", "rollout", "status",
+		"deployment/controller-manager", "-n", "nvidia-carbide", "--timeout=120s")
 	_, err = utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Controller manager did not become ready in time")
-
-	By("waiting for webhook server to start serving")
-	// The webhook server starts after the cert secret is mounted.
-	// Give it time to detect the cert files and begin serving.
-	time.Sleep(15 * time.Second)
 })
 
 var _ = AfterSuite(func() {
