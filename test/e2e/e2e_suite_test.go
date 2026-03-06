@@ -271,11 +271,14 @@ spec:
 	_, err = utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Webhook certificate not ready in time")
 
-	By("verifying webhook-server-cert secret exists")
-	cmd = exec.Command("kubectl", "get", "secret", "webhook-server-cert",
-		"-n", "nvidia-carbide")
-	_, err = utils.Run(cmd)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "webhook-server-cert secret not found after certificate Ready")
+	By("waiting for webhook-server-cert secret to exist")
+	verifySecret := func(g Gomega) {
+		cmd = exec.Command("kubectl", "get", "secret", "webhook-server-cert",
+			"-n", "nvidia-carbide")
+		_, err := utils.Run(cmd)
+		g.Expect(err).NotTo(HaveOccurred())
+	}
+	Eventually(verifySecret, 60*time.Second, 2*time.Second).Should(Succeed())
 
 	By("deleting the controller-manager pod to pick up the webhook cert")
 	// Delete the existing pod so a new one starts with the cert secret mounted.
