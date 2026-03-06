@@ -209,20 +209,60 @@ spec:
 	_, err = utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to install CRDs")
 
-	By("deploying the controller-manager")
-	// Retry deploy — cert-manager webhooks may not be immediately ready
-	// after installation, causing Issuer/Certificate creation to fail
-	var deployErr error
-	for attempt := 0; attempt < 3; attempt++ {
-		cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
-		_, deployErr = utils.Run(cmd)
-		if deployErr == nil {
+	By("verifying cert-manager can issue certificates")
+	// cert-manager webhook may report Available but still reject requests.
+	// Create a test self-signed issuer + cert to verify it actually works.
+	testCertYAML := `apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: e2e-test-issuer
+  namespace: default
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: e2e-test-cert
+  namespace: default
+spec:
+  secretName: e2e-test-cert-secret
+  issuerRef:
+    name: e2e-test-issuer
+    kind: Issuer
+  dnsNames:
+  - localhost
+`
+	testCertFile := filepath.Join("/tmp", "e2e-test-cert.yaml")
+	err = os.WriteFile(testCertFile, []byte(testCertYAML), 0o644)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred())
+	defer os.Remove(testCertFile)
+
+	// Retry until cert-manager accepts the Issuer (webhook may need time)
+	for attempt := 0; attempt < 12; attempt++ {
+		cmd = exec.Command("kubectl", "apply", "-f", testCertFile)
+		_, err = utils.Run(cmd)
+		if err == nil {
 			break
 		}
-		_, _ = fmt.Fprintf(GinkgoWriter, "Deploy attempt %d failed, retrying in 10s...\n", attempt+1)
+		_, _ = fmt.Fprintf(GinkgoWriter, "cert-manager not ready yet (attempt %d/12), waiting 10s...\n", attempt+1)
 		time.Sleep(10 * time.Second)
 	}
-	ExpectWithOffset(1, deployErr).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "cert-manager cannot issue certificates")
+
+	cmd = exec.Command("kubectl", "wait", "--for=condition=Ready",
+		"certificate/e2e-test-cert", "-n", "default", "--timeout=60s")
+	_, err = utils.Run(cmd)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Test certificate not ready — cert-manager is broken")
+
+	// Clean up test cert
+	cmd = exec.Command("kubectl", "delete", "-f", testCertFile, "--ignore-not-found")
+	_, _ = utils.Run(cmd)
+
+	By("deploying the controller-manager")
+	cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
+	_, err = utils.Run(cmd)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
 
 	By("waiting for webhook certificate to be issued")
 	cmd = exec.Command("kubectl", "wait", "--for=condition=Ready",
