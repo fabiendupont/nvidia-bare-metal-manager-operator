@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"context"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -47,7 +48,7 @@ func newCarbideDeployment(name string, profile DeploymentProfile) *CarbideDeploy
 
 func TestDefault_ManagementProfile_Databases(t *testing.T) {
 	cd := newCarbideDeployment("test-mgmt", ProfileManagement)
-	cd.Default()
+	cd.applyDefaults()
 
 	expected := []string{"forge", "temporal", "temporal_visibility", "keycloak"}
 	if len(cd.Spec.Infrastructure.PostgreSQL.Databases) != len(expected) {
@@ -62,7 +63,7 @@ func TestDefault_ManagementProfile_Databases(t *testing.T) {
 
 func TestDefault_ManagementProfile_DisablesDHCPPXEDNS(t *testing.T) {
 	cd := newCarbideDeployment("test-mgmt", ProfileManagement)
-	cd.Default()
+	cd.applyDefaults()
 
 	if cd.Spec.Core.DHCP.Enabled {
 		t.Error("expected DHCP disabled for management profile")
@@ -77,7 +78,7 @@ func TestDefault_ManagementProfile_DisablesDHCPPXEDNS(t *testing.T) {
 
 func TestDefault_ManagementProfile_EnablesREST(t *testing.T) {
 	cd := newCarbideDeployment("test-mgmt", ProfileManagement)
-	cd.Default()
+	cd.applyDefaults()
 
 	if cd.Spec.Rest == nil {
 		t.Fatal("expected Rest to be non-nil")
@@ -89,7 +90,7 @@ func TestDefault_ManagementProfile_EnablesREST(t *testing.T) {
 
 func TestDefault_SiteProfile_Databases(t *testing.T) {
 	cd := newCarbideDeployment("test-site", ProfileSite)
-	cd.Default()
+	cd.applyDefaults()
 
 	expected := []string{"carbide", "forge", "rla", "psm"}
 	if len(cd.Spec.Infrastructure.PostgreSQL.Databases) != len(expected) {
@@ -104,7 +105,7 @@ func TestDefault_SiteProfile_Databases(t *testing.T) {
 
 func TestDefault_SiteProfile_EnablesDHCPPXEDNS(t *testing.T) {
 	cd := newCarbideDeployment("test-site", ProfileSite)
-	cd.Default()
+	cd.applyDefaults()
 
 	if !cd.Spec.Core.DHCP.Enabled {
 		t.Error("expected DHCP enabled for site profile")
@@ -120,7 +121,7 @@ func TestDefault_SiteProfile_EnablesDHCPPXEDNS(t *testing.T) {
 func TestDefault_SiteProfile_DisablesREST(t *testing.T) {
 	cd := newCarbideDeployment("test-site", ProfileSite)
 	cd.Spec.Rest = &RestConfig{}
-	cd.Default()
+	cd.applyDefaults()
 
 	if cd.Spec.Rest.Enabled {
 		t.Error("expected REST disabled for site profile")
@@ -129,7 +130,7 @@ func TestDefault_SiteProfile_DisablesREST(t *testing.T) {
 
 func TestDefault_ManagementWithSiteProfile_Databases(t *testing.T) {
 	cd := newCarbideDeployment("test-combo", ProfileManagementWithSite)
-	cd.Default()
+	cd.applyDefaults()
 
 	expected := []string{"carbide", "forge", "rla", "psm", "temporal", "temporal_visibility", "keycloak"}
 	if len(cd.Spec.Infrastructure.PostgreSQL.Databases) != len(expected) {
@@ -144,7 +145,7 @@ func TestDefault_ManagementWithSiteProfile_Databases(t *testing.T) {
 
 func TestDefault_ManagementWithSiteProfile_EnablesEverything(t *testing.T) {
 	cd := newCarbideDeployment("test-combo", ProfileManagementWithSite)
-	cd.Default()
+	cd.applyDefaults()
 
 	if !cd.Spec.Core.DHCP.Enabled {
 		t.Error("expected DHCP enabled for management-with-site profile")
@@ -163,7 +164,7 @@ func TestDefault_ManagementWithSiteProfile_EnablesEverything(t *testing.T) {
 func TestDefault_TLS_NilCreatesSPIFFE(t *testing.T) {
 	cd := newCarbideDeployment("test-tls", ProfileManagement)
 	cd.Spec.TLS = nil
-	cd.Default()
+	cd.applyDefaults()
 
 	if cd.Spec.TLS == nil {
 		t.Fatal("expected TLS to be set")
@@ -188,7 +189,7 @@ func TestDefault_TLS_NilCreatesSPIFFE(t *testing.T) {
 func TestDefault_TLS_ExistingEmptyModeSetsSpiffe(t *testing.T) {
 	cd := newCarbideDeployment("test-tls", ProfileManagement)
 	cd.Spec.TLS = &TLSConfig{}
-	cd.Default()
+	cd.applyDefaults()
 
 	if cd.Spec.TLS.Mode != TLSModeSpiffe {
 		t.Errorf("expected TLS mode %q, got %q", TLSModeSpiffe, cd.Spec.TLS.Mode)
@@ -211,7 +212,7 @@ func TestDefault_VaultCreatedForSiteProfiles(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cd := newCarbideDeployment("test", tt.profile)
-			cd.Default()
+			cd.applyDefaults()
 
 			if tt.want && cd.Spec.Core.Vault == nil {
 				t.Error("expected Vault to be created")
@@ -225,7 +226,7 @@ func TestDefault_VaultCreatedForSiteProfiles(t *testing.T) {
 
 func TestDefault_VaultDefaults(t *testing.T) {
 	cd := newCarbideDeployment("test", ProfileSite)
-	cd.Default()
+	cd.applyDefaults()
 
 	if cd.Spec.Core.Vault.Mode != ManagedMode {
 		t.Errorf("expected vault mode %q, got %q", ManagedMode, cd.Spec.Core.Vault.Mode)
@@ -251,7 +252,7 @@ func TestDefault_RLACreatedForSiteProfiles(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cd := newCarbideDeployment("test", tt.profile)
-			cd.Default()
+			cd.applyDefaults()
 
 			if tt.want && cd.Spec.Core.RLA == nil {
 				t.Error("expected RLA to be created")
@@ -276,7 +277,7 @@ func TestDefault_PSMCreatedForSiteProfiles(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cd := newCarbideDeployment("test", tt.profile)
-			cd.Default()
+			cd.applyDefaults()
 
 			if tt.want && cd.Spec.Core.PSM == nil {
 				t.Error("expected PSM to be created")
@@ -302,7 +303,7 @@ func TestDefault_Namespace(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cd := newCarbideDeployment(tt.cdName, tt.profile)
-			cd.Default()
+			cd.applyDefaults()
 
 			if cd.Spec.Infrastructure.Namespace != tt.wantNS {
 				t.Errorf("expected namespace %q, got %q", tt.wantNS, cd.Spec.Infrastructure.Namespace)
@@ -314,7 +315,7 @@ func TestDefault_Namespace(t *testing.T) {
 func TestDefault_NamespaceNotOverriddenWhenSet(t *testing.T) {
 	cd := newCarbideDeployment("test", ProfileManagement)
 	cd.Spec.Infrastructure.Namespace = "custom-ns"
-	cd.Default()
+	cd.applyDefaults()
 
 	if cd.Spec.Infrastructure.Namespace != "custom-ns" {
 		t.Errorf("expected namespace to remain %q, got %q", "custom-ns", cd.Spec.Infrastructure.Namespace)
@@ -323,7 +324,7 @@ func TestDefault_NamespaceNotOverriddenWhenSet(t *testing.T) {
 
 func TestDefault_CoreNamespaceInheritsInfrastructure(t *testing.T) {
 	cd := newCarbideDeployment("test", ProfileManagement)
-	cd.Default()
+	cd.applyDefaults()
 
 	if cd.Spec.Core.Namespace != cd.Spec.Infrastructure.Namespace {
 		t.Errorf("expected core namespace %q to match infrastructure %q", cd.Spec.Core.Namespace, cd.Spec.Infrastructure.Namespace)
@@ -332,7 +333,7 @@ func TestDefault_CoreNamespaceInheritsInfrastructure(t *testing.T) {
 
 func TestDefault_RestNamespaceInheritsInfrastructure(t *testing.T) {
 	cd := newCarbideDeployment("test", ProfileManagement)
-	cd.Default()
+	cd.applyDefaults()
 
 	if cd.Spec.Rest.Namespace != cd.Spec.Infrastructure.Namespace {
 		t.Errorf("expected rest namespace %q to match infrastructure %q", cd.Spec.Rest.Namespace, cd.Spec.Infrastructure.Namespace)
@@ -341,7 +342,7 @@ func TestDefault_RestNamespaceInheritsInfrastructure(t *testing.T) {
 
 func TestDefault_PortDefaults(t *testing.T) {
 	cd := newCarbideDeployment("test", ProfileManagement)
-	cd.Default()
+	cd.applyDefaults()
 
 	if cd.Spec.Core.API.Port != 1079 {
 		t.Errorf("expected API port 1079, got %d", cd.Spec.Core.API.Port)
@@ -356,7 +357,7 @@ func TestDefault_PortDefaults(t *testing.T) {
 
 func TestDefault_PXEPortDefaults(t *testing.T) {
 	cd := newCarbideDeployment("test", ProfileSite)
-	cd.Default()
+	cd.applyDefaults()
 
 	if cd.Spec.Core.PXE.TFTPPort != 69 {
 		t.Errorf("expected TFTP port 69, got %d", cd.Spec.Core.PXE.TFTPPort)
@@ -368,7 +369,7 @@ func TestDefault_PXEPortDefaults(t *testing.T) {
 
 func TestDefault_KeycloakRealmDefaults(t *testing.T) {
 	cd := newCarbideDeployment("test", ProfileManagement)
-	cd.Default()
+	cd.applyDefaults()
 
 	if cd.Spec.Rest.Keycloak.Realm != "carbide" {
 		t.Errorf("expected keycloak realm %q, got %q", "carbide", cd.Spec.Rest.Keycloak.Realm)
@@ -377,7 +378,7 @@ func TestDefault_KeycloakRealmDefaults(t *testing.T) {
 
 func TestDefault_TemporalChartVersionDefaults(t *testing.T) {
 	cd := newCarbideDeployment("test", ProfileManagement)
-	cd.Default()
+	cd.applyDefaults()
 
 	if cd.Spec.Rest.Temporal.ChartVersion != "0.73.1" {
 		t.Errorf("expected temporal chart version %q, got %q", "0.73.1", cd.Spec.Rest.Temporal.ChartVersion)
@@ -386,7 +387,7 @@ func TestDefault_TemporalChartVersionDefaults(t *testing.T) {
 
 func TestDefault_TemporalVersionDefaults(t *testing.T) {
 	cd := newCarbideDeployment("test", ProfileManagement)
-	cd.Default()
+	cd.applyDefaults()
 
 	if cd.Spec.Rest.Temporal.Version != "1.22.0" {
 		t.Errorf("expected temporal version %q, got %q", "1.22.0", cd.Spec.Rest.Temporal.Version)
@@ -395,7 +396,7 @@ func TestDefault_TemporalVersionDefaults(t *testing.T) {
 
 func TestDefault_PostgreSQLModeDefaults(t *testing.T) {
 	cd := newCarbideDeployment("test", ProfileManagement)
-	cd.Default()
+	cd.applyDefaults()
 
 	if cd.Spec.Infrastructure.PostgreSQL.Mode != ManagedMode {
 		t.Errorf("expected postgresql mode %q, got %q", ManagedMode, cd.Spec.Infrastructure.PostgreSQL.Mode)
@@ -404,7 +405,7 @@ func TestDefault_PostgreSQLModeDefaults(t *testing.T) {
 
 func TestDefault_TemporalModeDefaults(t *testing.T) {
 	cd := newCarbideDeployment("test", ProfileManagement)
-	cd.Default()
+	cd.applyDefaults()
 
 	if cd.Spec.Rest.Temporal.Mode != ManagedMode {
 		t.Errorf("expected temporal mode %q, got %q", ManagedMode, cd.Spec.Rest.Temporal.Mode)
@@ -413,7 +414,7 @@ func TestDefault_TemporalModeDefaults(t *testing.T) {
 
 func TestDefault_KeycloakModeDefaults(t *testing.T) {
 	cd := newCarbideDeployment("test", ProfileManagement)
-	cd.Default()
+	cd.applyDefaults()
 
 	if cd.Spec.Rest.Keycloak.Mode != AuthModeManaged {
 		t.Errorf("expected keycloak mode %q, got %q", AuthModeManaged, cd.Spec.Rest.Keycloak.Mode)
@@ -422,7 +423,7 @@ func TestDefault_KeycloakModeDefaults(t *testing.T) {
 
 func TestDefault_DomainDefault(t *testing.T) {
 	cd := newCarbideDeployment("test", ProfileManagement)
-	cd.Default()
+	cd.applyDefaults()
 
 	if cd.Spec.Network.Domain != "carbide.local" {
 		t.Errorf("expected domain %q, got %q", "carbide.local", cd.Spec.Network.Domain)
@@ -431,7 +432,7 @@ func TestDefault_DomainDefault(t *testing.T) {
 
 func TestDefault_ReplicaDefaults(t *testing.T) {
 	cd := newCarbideDeployment("test", ProfileManagement)
-	cd.Default()
+	cd.applyDefaults()
 
 	if cd.Spec.Core.API.Replicas != 1 {
 		t.Errorf("expected API replicas 1, got %d", cd.Spec.Core.API.Replicas)
@@ -449,7 +450,7 @@ func TestDefault_ReplicaDefaults(t *testing.T) {
 
 func TestDefault_RLADefaults(t *testing.T) {
 	cd := newCarbideDeployment("test", ProfileSite)
-	cd.Default()
+	cd.applyDefaults()
 
 	if cd.Spec.Core.RLA == nil {
 		t.Fatal("expected RLA to be created")
@@ -467,7 +468,7 @@ func TestDefault_RLADefaults(t *testing.T) {
 
 func TestDefault_PSMDefaults(t *testing.T) {
 	cd := newCarbideDeployment("test", ProfileSite)
-	cd.Default()
+	cd.applyDefaults()
 
 	if cd.Spec.Core.PSM == nil {
 		t.Fatal("expected PSM to be created")
@@ -486,7 +487,7 @@ func TestDefault_PSMDefaults(t *testing.T) {
 func TestDefault_DatabasesNotOverriddenWhenSet(t *testing.T) {
 	cd := newCarbideDeployment("test", ProfileManagement)
 	cd.Spec.Infrastructure.PostgreSQL.Databases = []string{"custom_db"}
-	cd.Default()
+	cd.applyDefaults()
 
 	if len(cd.Spec.Infrastructure.PostgreSQL.Databases) != 1 || cd.Spec.Infrastructure.PostgreSQL.Databases[0] != "custom_db" {
 		t.Errorf("expected databases to remain [custom_db], got %v", cd.Spec.Infrastructure.PostgreSQL.Databases)
@@ -495,7 +496,7 @@ func TestDefault_DatabasesNotOverriddenWhenSet(t *testing.T) {
 
 func TestDefault_TemporalNamespaceDefault(t *testing.T) {
 	cd := newCarbideDeployment("test", ProfileManagement)
-	cd.Default()
+	cd.applyDefaults()
 
 	if cd.Spec.Rest.Temporal.Namespace != "temporal" {
 		t.Errorf("expected temporal namespace %q, got %q", "temporal", cd.Spec.Rest.Temporal.Namespace)
@@ -937,7 +938,7 @@ func TestValidateCreate_DelegatesToValidate(t *testing.T) {
 	cd := newCarbideDeployment("test", ProfileManagement)
 	cd.Spec.Rest = nil
 
-	_, err := cd.ValidateCreate()
+	_, err := cd.ValidateCreate(context.Background(), cd)
 	if err == nil {
 		t.Error("expected ValidateCreate to return error from validateCarbideDeployment")
 	}
@@ -947,7 +948,7 @@ func TestValidateUpdate_DelegatesToValidate(t *testing.T) {
 	cd := newCarbideDeployment("test", ProfileManagement)
 	cd.Spec.Rest = nil
 
-	_, err := cd.ValidateUpdate(nil)
+	_, err := cd.ValidateUpdate(context.Background(), nil, cd)
 	if err == nil {
 		t.Error("expected ValidateUpdate to return error from validateCarbideDeployment")
 	}
@@ -956,7 +957,7 @@ func TestValidateUpdate_DelegatesToValidate(t *testing.T) {
 func TestValidateDelete_NoError(t *testing.T) {
 	cd := newCarbideDeployment("test", ProfileManagement)
 
-	warnings, err := cd.ValidateDelete()
+	warnings, err := cd.ValidateDelete(context.Background(), cd)
 	if err != nil {
 		t.Errorf("expected no error from ValidateDelete, got %v", err)
 	}

@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"context"
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -31,14 +32,26 @@ var carbidedeploymentlog = logf.Log.WithName("carbidedeployment-resource")
 func (r *CarbideDeployment) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(r).
+		WithDefaulter(r).
+		WithValidator(r).
 		Complete()
 }
 
 // +kubebuilder:webhook:path=/mutate-carbide-nvidia-com-v1alpha1-carbidedeployment,mutating=true,failurePolicy=fail,sideEffects=None,groups=carbide.nvidia.com,resources=carbidedeployments,verbs=create;update,versions=v1alpha1,name=mcarbidedeployment.kb.io,admissionReviewVersions=v1
 
-// Default implements defaulting logic for CarbideDeployment
-func (r *CarbideDeployment) Default() {
-	carbidedeploymentlog.Info("applying defaults", "name", r.Name, "profile", r.Spec.Profile)
+// Default implements admission.CustomDefaulter for CarbideDeployment
+func (r *CarbideDeployment) Default(_ context.Context, obj runtime.Object) error {
+	cd, ok := obj.(*CarbideDeployment)
+	if !ok {
+		return fmt.Errorf("expected CarbideDeployment, got %T", obj)
+	}
+	carbidedeploymentlog.Info("applying defaults", "name", cd.Name, "profile", cd.Spec.Profile)
+	cd.applyDefaults()
+	return nil
+}
+
+// applyDefaults contains the actual defaulting logic.
+func (r *CarbideDeployment) applyDefaults() {
 
 	// Set namespace defaults based on profile
 	if r.Spec.Infrastructure != nil && r.Spec.Infrastructure.Namespace == "" {
@@ -281,25 +294,28 @@ func (r *CarbideDeployment) Default() {
 
 // +kubebuilder:webhook:path=/validate-carbide-nvidia-com-v1alpha1-carbidedeployment,mutating=false,failurePolicy=fail,sideEffects=None,groups=carbide.nvidia.com,resources=carbidedeployments,verbs=create;update,versions=v1alpha1,name=vcarbidedeployment.kb.io,admissionReviewVersions=v1
 
-// ValidateCreate implements validation logic for create operations
-func (r *CarbideDeployment) ValidateCreate() (admission.Warnings, error) {
-	carbidedeploymentlog.Info("validating create", "name", r.Name)
-
-	return r.validateCarbideDeployment()
+// ValidateCreate implements admission.CustomValidator for CarbideDeployment
+func (r *CarbideDeployment) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
+	cd, ok := obj.(*CarbideDeployment)
+	if !ok {
+		return nil, fmt.Errorf("expected CarbideDeployment, got %T", obj)
+	}
+	carbidedeploymentlog.Info("validating create", "name", cd.Name)
+	return cd.validateCarbideDeployment()
 }
 
-// ValidateUpdate implements webhook.Validator
-func (r *CarbideDeployment) ValidateUpdate(old runtime.Object) (admission.Warnings, error) {
-	carbidedeploymentlog.Info("validating update", "name", r.Name)
-
-	return r.validateCarbideDeployment()
+// ValidateUpdate implements admission.CustomValidator for CarbideDeployment
+func (r *CarbideDeployment) ValidateUpdate(_ context.Context, _, newObj runtime.Object) (admission.Warnings, error) {
+	cd, ok := newObj.(*CarbideDeployment)
+	if !ok {
+		return nil, fmt.Errorf("expected CarbideDeployment, got %T", newObj)
+	}
+	carbidedeploymentlog.Info("validating update", "name", cd.Name)
+	return cd.validateCarbideDeployment()
 }
 
-// ValidateDelete implements webhook.Validator
-func (r *CarbideDeployment) ValidateDelete() (admission.Warnings, error) {
-	carbidedeploymentlog.Info("validating delete", "name", r.Name)
-
-	// No validation needed for delete
+// ValidateDelete implements admission.CustomValidator for CarbideDeployment
+func (r *CarbideDeployment) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
 	return nil, nil
 }
 
