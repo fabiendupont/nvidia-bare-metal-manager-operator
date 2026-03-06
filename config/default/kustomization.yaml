@@ -1,6 +1,4 @@
-namespace: carbide-operator-system
-
-namePrefix: carbide-operator-
+namespace: nvidia-carbide
 
 resources:
 - ../crd

@@ -266,15 +266,15 @@ spec:
 
 	By("waiting for webhook certificate to be issued")
 	cmd = exec.Command("kubectl", "wait", "--for=condition=Ready",
-		"certificate/carbide-operator-serving-cert",
-		"-n", "carbide-operator-system", "--timeout=180s")
+		"certificate/serving-cert",
+		"-n", "nvidia-carbide", "--timeout=180s")
 	_, err = utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Webhook certificate not ready in time")
 
 	By("waiting for the controller-manager pod to be ready")
 	cmd = exec.Command("kubectl", "wait", "--for=condition=Available",
-		"deployment/carbide-operator-controller-manager",
-		"-n", "carbide-operator-system", "--timeout=180s")
+		"deployment/controller-manager",
+		"-n", "nvidia-carbide", "--timeout=180s")
 	_, err = utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Controller manager did not become ready in time")
 })
