@@ -106,6 +106,7 @@ func main() {
 	webhookTLSOpts := tlsOpts
 	webhookServerOptions := webhook.Options{
 		TLSOpts: webhookTLSOpts,
+		Port:    9443,
 	}
 
 	if len(webhookCertPath) > 0 {
