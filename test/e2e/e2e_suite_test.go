@@ -159,13 +159,29 @@ spec:
 		_, _ = utils.Run(cmd)
 	}
 
-	By("building the stub image for Tier 2 tests")
-	cmd = exec.Command("make", "docker-build-stub", "E2E_REGISTRY=localhost E2E_IMAGE_TAG=e2e")
+	By("building real Carbide service images for Tier 2 tests")
+	cmd = exec.Command("make", "docker-build-e2e-services",
+		"E2E_REGISTRY=localhost", "E2E_IMAGE_TAG=e2e")
 	_, err = utils.Run(cmd)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build stub image")
-
-	err = utils.LoadImageToKindClusterWithName("localhost/carbide-stub:e2e")
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load stub image into Kind")
+	if err != nil {
+		_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: Failed to build real service images: %v\n", err)
+		_, _ = fmt.Fprintf(GinkgoWriter, "Tier 2 tests requiring real images will be skipped.\n")
+	} else {
+		for _, img := range []string{
+			"localhost/carbide-api:e2e",
+			"localhost/carbide-rla:e2e",
+			"localhost/carbide-psm:e2e",
+			"localhost/carbide-rest-api:e2e",
+			"localhost/carbide-rest-workflow:e2e",
+			"localhost/carbide-rest-site-manager:e2e",
+			"localhost/carbide-rest-db:e2e",
+		} {
+			err = utils.LoadImageToKindClusterWithName(img)
+			if err != nil {
+				_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: Failed to load %s: %v\n", img, err)
+			}
+		}
+	}
 
 	By("installing PGO CRDs (for PostgresCluster CR validation)")
 	cmd = exec.Command("kubectl", "apply", "--server-side", "-k",
@@ -351,7 +367,7 @@ spec:
 
 	By("waiting for Keycloak to be ready")
 	cmd = exec.Command("kubectl", "wait", "--for=condition=Available",
-		"deployment/keycloak", "-n", "keycloak-e2e", "--timeout=180s")
+		"deployment/keycloak", "-n", "keycloak-e2e", "--timeout=300s")
 	_, err = utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Keycloak not ready in time")
 

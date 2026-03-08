@@ -7,8 +7,6 @@ on:
 env:
   IMG: localhost/nvidia-carbide-operator:e2e
   DOCKERFILE: Dockerfile.ci
-  # Install both cert-manager and SPIRE for full E2E coverage
-  # Set to "true" to skip if already installed on the target cluster
   CERT_MANAGER_INSTALL_SKIP: "false"
   SPIRE_INSTALL_SKIP: "false"
 
@@ -19,6 +17,20 @@ jobs:
     steps:
       - name: Clone the code
         uses: actions/checkout@v4
+
+      - name: Clone bare-metal-manager-core
+        uses: actions/checkout@v4
+        with:
+          repository: NVIDIA/bare-metal-manager-core
+          path: ../carbide/bare-metal-manager-core
+          token: ${{ secrets.CARBIDE_REPO_TOKEN || github.token }}
+
+      - name: Clone bare-metal-manager-rest
+        uses: actions/checkout@v4
+        with:
+          repository: NVIDIA/bare-metal-manager-rest
+          path: ../carbide/bare-metal-manager-rest
+          token: ${{ secrets.CARBIDE_REPO_TOKEN || github.token }}
 
       - name: Setup Go
         uses: actions/setup-go@v5
