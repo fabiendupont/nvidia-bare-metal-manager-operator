@@ -49,6 +49,14 @@ jobs:
         run: |
           make docker-build-e2e-services E2E_REGISTRY=localhost E2E_IMAGE_TAG=e2e
 
+      - name: Create Kind cluster and pre-load images
+        run: |
+          make setup-test-e2e
+          docker pull quay.io/keycloak/keycloak:latest
+          docker pull docker.io/library/postgres:16-alpine
+          kind load docker-image quay.io/keycloak/keycloak:latest --name carbide-operator-test-e2e
+          kind load docker-image docker.io/library/postgres:16-alpine --name carbide-operator-test-e2e
+
       - name: Run E2E tests
         run: |
           go mod tidy
