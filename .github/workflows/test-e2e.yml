@@ -52,10 +52,14 @@ jobs:
       - name: Create Kind cluster and pre-load images
         run: |
           make setup-test-e2e
-          docker pull quay.io/keycloak/keycloak:latest
-          docker pull docker.io/library/postgres:16-alpine
-          kind load docker-image quay.io/keycloak/keycloak:latest --name carbide-operator-test-e2e
-          kind load docker-image docker.io/library/postgres:16-alpine --name carbide-operator-test-e2e
+          for img in \
+            quay.io/keycloak/keycloak:26.1 \
+            docker.io/library/postgres:16-alpine \
+            docker.io/alpine/helm:latest \
+            docker.io/hashicorp/vault:latest; do
+            docker pull "$img"
+            kind load docker-image "$img" --name carbide-operator-test-e2e
+          done
 
       - name: Run E2E tests
         run: |
