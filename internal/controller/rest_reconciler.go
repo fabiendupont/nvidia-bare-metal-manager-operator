@@ -772,7 +772,15 @@ func (r *RestReconciler) createOrUpdateUnstructured(ctx context.Context, obj *un
 
 	logger.Info("Updating resource", "gvk", obj.GroupVersionKind(), "name", obj.GetName())
 	obj.SetResourceVersion(existing.GetResourceVersion())
-	return r.Update(ctx, obj)
+	updateErr := r.Update(ctx, obj)
+	if updateErr != nil && errors.IsConflict(updateErr) {
+		if err := r.Get(ctx, client.ObjectKeyFromObject(obj), existing); err != nil {
+			return err
+		}
+		obj.SetResourceVersion(existing.GetResourceVersion())
+		return r.Update(ctx, obj)
+	}
+	return updateErr
 }
 
 // createOrUpdate creates or updates a Kubernetes object
@@ -792,7 +800,15 @@ func (r *RestReconciler) createOrUpdate(ctx context.Context, obj client.Object) 
 
 	logger.Info("Updating resource", "kind", obj.GetObjectKind().GroupVersionKind().Kind, "name", obj.GetName())
 	obj.SetResourceVersion(existing.GetResourceVersion())
-	return r.Update(ctx, obj)
+	updateErr := r.Update(ctx, obj)
+	if updateErr != nil && errors.IsConflict(updateErr) {
+		if err := r.Get(ctx, client.ObjectKeyFromObject(obj), existing); err != nil {
+			return err
+		}
+		obj.SetResourceVersion(existing.GetResourceVersion())
+		return r.Update(ctx, obj)
+	}
+	return updateErr
 }
 
 // getTemporalEndpoint retrieves the Temporal endpoint based on managed/external mode
