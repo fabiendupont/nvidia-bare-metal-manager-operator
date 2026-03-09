@@ -159,27 +159,30 @@ spec:
 		_, _ = utils.Run(cmd)
 	}
 
-	By("building real Carbide service images for Tier 2 tests")
-	cmd = exec.Command("make", "docker-build-e2e-services",
-		"E2E_REGISTRY=localhost", "E2E_IMAGE_TAG=e2e")
-	_, err = utils.Run(cmd)
-	if err != nil {
-		_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: Failed to build real service images: %v\n", err)
-		_, _ = fmt.Fprintf(GinkgoWriter, "Tier 2 tests requiring real images will be skipped.\n")
-	} else {
-		for _, img := range []string{
-			"localhost/carbide-api:e2e",
-			"localhost/carbide-rla:e2e",
-			"localhost/carbide-psm:e2e",
-			"localhost/carbide-rest-api:e2e",
-			"localhost/carbide-rest-workflow:e2e",
-			"localhost/carbide-rest-site-manager:e2e",
-			"localhost/carbide-rest-db:e2e",
-		} {
-			err = utils.LoadImageToKindClusterWithName(img)
-			if err != nil {
-				_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: Failed to load %s: %v\n", img, err)
-			}
+	if os.Getenv("E2E_IMAGES_SKIP") != "true" {
+		By("building real Carbide service images for Tier 2 tests")
+		cmd = exec.Command("make", "docker-build-e2e-services",
+			"E2E_REGISTRY=localhost", "E2E_IMAGE_TAG=e2e")
+		_, err = utils.Run(cmd)
+		if err != nil {
+			_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: Failed to build real service images: %v\n", err)
+			_, _ = fmt.Fprintf(GinkgoWriter, "Tier 2 tests requiring real images will be skipped.\n")
+		}
+	}
+
+	By("loading Carbide service images into Kind")
+	for _, img := range []string{
+		"localhost/carbide-api:e2e",
+		"localhost/carbide-rla:e2e",
+		"localhost/carbide-psm:e2e",
+		"localhost/carbide-rest-api:e2e",
+		"localhost/carbide-rest-workflow:e2e",
+		"localhost/carbide-rest-site-manager:e2e",
+		"localhost/carbide-rest-db:e2e",
+	} {
+		err = utils.LoadImageToKindClusterWithName(img)
+		if err != nil {
+			_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: Failed to load %s: %v\n", img, err)
 		}
 	}
 

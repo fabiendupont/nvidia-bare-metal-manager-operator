@@ -9,11 +9,13 @@ env:
   DOCKERFILE: Dockerfile.ci
   CERT_MANAGER_INSTALL_SKIP: "false"
   SPIRE_INSTALL_SKIP: "false"
+  E2E_IMAGES_SKIP: "false"
 
 jobs:
   test-e2e:
     name: Run on Ubuntu
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     env:
       CORE_REPO_PATH: /tmp/carbide/bare-metal-manager-core
       REST_REPO_PATH: /tmp/carbide/bare-metal-manager-rest
@@ -42,10 +44,15 @@ jobs:
           chmod +x ./kind
           sudo mv ./kind /usr/local/bin/kind
 
+      - name: Build Carbide service images
+        if: env.E2E_IMAGES_SKIP != 'true'
+        run: |
+          make docker-build-e2e-services E2E_REGISTRY=localhost E2E_IMAGE_TAG=e2e
+
       - name: Run E2E tests
         run: |
           go mod tidy
-          make test-e2e
+          E2E_IMAGES_SKIP=true make test-e2e
 
       - name: Cleanup
         if: always()
