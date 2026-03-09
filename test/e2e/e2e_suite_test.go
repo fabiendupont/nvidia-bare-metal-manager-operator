@@ -327,7 +327,7 @@ spec:
     spec:
       containers:
       - name: keycloak
-        image: quay.io/keycloak/keycloak:latest
+        image: quay.io/keycloak/keycloak:26.1
         command: ["start-dev"]
         env:
         - name: KEYCLOAK_ADMIN
@@ -337,6 +337,8 @@ spec:
         - name: KC_HTTP_PORT
           value: "8080"
         - name: KC_HOSTNAME_STRICT
+        - name: JAVA_OPTS_APPEND
+          value: "-Xms256m -Xmx512m"
           value: "false"
         ports:
         - containerPort: 8080
