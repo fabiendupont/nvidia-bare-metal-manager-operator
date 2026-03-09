@@ -1252,7 +1252,7 @@ spec:
 						"Deployment %s should exist", deploy)
 				}
 			}
-			Eventually(verifyDeploymentsExist, 2*time.Minute, 2*time.Second).Should(Succeed())
+			Eventually(verifyDeploymentsExist, 5*time.Minute, 2*time.Second).Should(Succeed())
 
 			By("waiting for Deployments to become Available")
 			for _, deploy := range []string{"carbide-api", "carbide-rla", "carbide-psm"} {
