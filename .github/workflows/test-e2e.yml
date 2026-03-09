@@ -15,23 +15,16 @@ jobs:
     name: Run on Ubuntu
     runs-on: ubuntu-latest
     env:
-      CORE_REPO_PATH: ${{ github.workspace }}/bare-metal-manager-core
-      REST_REPO_PATH: ${{ github.workspace }}/bare-metal-manager-rest
+      CORE_REPO_PATH: /tmp/carbide/bare-metal-manager-core
+      REST_REPO_PATH: /tmp/carbide/bare-metal-manager-rest
     steps:
       - name: Clone the code
         uses: actions/checkout@v4
 
-      - name: Clone bare-metal-manager-core
-        uses: actions/checkout@v4
-        with:
-          repository: NVIDIA/bare-metal-manager-core
-          path: bare-metal-manager-core
-
-      - name: Clone bare-metal-manager-rest
-        uses: actions/checkout@v4
-        with:
-          repository: NVIDIA/bare-metal-manager-rest
-          path: bare-metal-manager-rest
+      - name: Clone Carbide source repos
+        run: |
+          git clone --depth 1 https://github.com/NVIDIA/bare-metal-manager-core.git /tmp/carbide/bare-metal-manager-core
+          git clone --depth 1 https://github.com/NVIDIA/bare-metal-manager-rest.git /tmp/carbide/bare-metal-manager-rest
 
       - name: Setup Go
         uses: actions/setup-go@v5
