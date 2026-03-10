@@ -275,18 +275,22 @@ func TestBuildAPIService_SelectorAndPorts(t *testing.T) {
 	if svc.Spec.Selector["app"] != "carbide-api" {
 		t.Errorf("selector app = %q, want %q", svc.Spec.Selector["app"], "carbide-api")
 	}
-	if len(svc.Spec.Ports) != 1 {
-		t.Fatalf("expected 1 port, got %d", len(svc.Spec.Ports))
+	if len(svc.Spec.Ports) != 2 {
+		t.Fatalf("expected 2 ports (grpc + metrics), got %d", len(svc.Spec.Ports))
 	}
-	port := svc.Spec.Ports[0]
-	if port.Name != "grpc" {
-		t.Errorf("port name = %q, want %q", port.Name, "grpc")
+	grpcPort := svc.Spec.Ports[0]
+	if grpcPort.Name != "grpc" {
+		t.Errorf("port[0] name = %q, want %q", grpcPort.Name, "grpc")
 	}
-	if port.Port != 1079 {
-		t.Errorf("port = %d, want 1079", port.Port)
+	if grpcPort.Port != 1079 {
+		t.Errorf("port[0] = %d, want 1079", grpcPort.Port)
 	}
-	if port.Protocol != corev1.ProtocolTCP {
-		t.Errorf("protocol = %v, want TCP", port.Protocol)
+	metricsPort := svc.Spec.Ports[1]
+	if metricsPort.Name != "metrics" {
+		t.Errorf("port[1] name = %q, want %q", metricsPort.Name, "metrics")
+	}
+	if metricsPort.Port != 1080 {
+		t.Errorf("port[1] = %d, want 1080", metricsPort.Port)
 	}
 }
 

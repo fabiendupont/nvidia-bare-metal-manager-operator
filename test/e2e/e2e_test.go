@@ -1172,7 +1172,7 @@ spec:
 			_, _ = utils.Run(cmd)
 		})
 
-		It("should deploy site services using stub image and become Available", func() {
+		It("should deploy site services and become Available", func() {
 			By("applying a CarbideDeployment CR with stub image overrides")
 			cr := fmt.Sprintf(`apiVersion: carbide.nvidia.com/v1alpha1
 kind: CarbideDeployment

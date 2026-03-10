@@ -28,6 +28,7 @@ import (
 
 	carbitev1alpha1 "github.com/NVIDIA/bare-metal-manager-operator/api/v1alpha1"
 	"github.com/NVIDIA/bare-metal-manager-operator/internal/resources"
+	"github.com/NVIDIA/bare-metal-manager-operator/internal/resources/infrastructure"
 	"github.com/NVIDIA/bare-metal-manager-operator/internal/resources/tls"
 )
 
@@ -201,40 +202,76 @@ func BuildAPIDeployment(deployment *carbitev1alpha1.CarbideDeployment, namespace
 		},
 	}
 
+	// Resolve the PG secret for the carbide user
+	pgSecretName := infrastructure.ResolveUserSecret(deployment, "carbide")
+
+	// Build env vars matching sno-manifests
+	env := []corev1.EnvVar{
+		{Name: "RUST_LOG", Value: "info"},
+		{Name: "CARBIDE_API_DATABASE_URL", ValueFrom: secretKeyRef(pgSecretName, "uri")},
+	}
+
+	// Add Vault env vars if configured
+	if deployment.Spec.Core.Vault != nil {
+		kvMount := deployment.Spec.Core.Vault.KVMountPath
+		if kvMount == "" {
+			kvMount = "secrets"
+		}
+		if deployment.Spec.Core.Vault.Mode == carbitev1alpha1.ExternalMode && deployment.Spec.Core.Vault.Address != "" {
+			env = append(env,
+				corev1.EnvVar{Name: "VAULT_ADDR", Value: deployment.Spec.Core.Vault.Address},
+				corev1.EnvVar{Name: "VAULT_KV_MOUNT_LOCATION", Value: kvMount},
+				corev1.EnvVar{Name: "VAULT_PKI_MOUNT_LOCATION", Value: "unsupported"},
+				corev1.EnvVar{Name: "VAULT_PKI_ROLE_NAME", Value: "unsupported"},
+			)
+			if deployment.Spec.Core.Vault.TokenSecretRef != nil {
+				key := deployment.Spec.Core.Vault.TokenSecretRef.Key
+				if key == "" {
+					key = "token"
+				}
+				env = append(env, corev1.EnvVar{
+					Name: "VAULT_TOKEN", ValueFrom: secretKeyRef(deployment.Spec.Core.Vault.TokenSecretRef.Name, key),
+				})
+			}
+		} else if deployment.Spec.Core.Vault.Mode == carbitev1alpha1.ManagedMode {
+			env = append(env,
+				corev1.EnvVar{Name: "VAULT_ADDR", Value: fmt.Sprintf("http://vault.%s.svc:8200", namespace)},
+				corev1.EnvVar{Name: "VAULT_TOKEN", ValueFrom: secretKeyRef("vault-unseal-secret", "root-token")},
+				corev1.EnvVar{Name: "VAULT_KV_MOUNT_LOCATION", Value: kvMount},
+				corev1.EnvVar{Name: "VAULT_PKI_MOUNT_LOCATION", Value: "unsupported"},
+				corev1.EnvVar{Name: "VAULT_PKI_ROLE_NAME", Value: "unsupported"},
+			)
+		}
+	}
+
+	metricsPort := port + 1
+
 	apiContainer := corev1.Container{
-		Name:            "api",
+		Name:            "carbide-api",
 		Image:           imageName,
 		ImagePullPolicy: resources.GetImagePullPolicy(deployment),
+		Command:         []string{"/opt/carbide/carbide-api"},
+		Args:            []string{"run", "--config-path=/etc/carbide/carbide-api-config.toml"},
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          "grpc",
 				ContainerPort: port,
 				Protocol:      corev1.ProtocolTCP,
 			},
-		},
-		Env: []corev1.EnvVar{
 			{
-				Name:  "RUST_LOG",
-				Value: "info",
-			},
-			{
-				Name: "CARBIDE_API_DATABASE_URL",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: fmt.Sprintf("%s-secret", APIName),
-						},
-						Key: "database-url",
-					},
-				},
+				Name:          "metrics",
+				ContainerPort: metricsPort,
+				Protocol:      corev1.ProtocolTCP,
 			},
 		},
+		Env:          env,
 		VolumeMounts: volumeMounts,
 		Resources:    res,
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
-				TCPSocket: &corev1.TCPSocketAction{
-					Port: intstr.FromInt32(port),
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: "/metrics",
+					Port: intstr.FromInt32(metricsPort),
 				},
 			},
 			InitialDelaySeconds: 30,
@@ -242,11 +279,12 @@ func BuildAPIDeployment(deployment *carbitev1alpha1.CarbideDeployment, namespace
 		},
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
-				TCPSocket: &corev1.TCPSocketAction{
-					Port: intstr.FromInt32(port),
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: "/metrics",
+					Port: intstr.FromInt32(metricsPort),
 				},
 			},
-			InitialDelaySeconds: 5,
+			InitialDelaySeconds: 10,
 			PeriodSeconds:       5,
 		},
 	}
@@ -256,19 +294,19 @@ func BuildAPIDeployment(deployment *carbitev1alpha1.CarbideDeployment, namespace
 		Name:            "db-migrations",
 		Image:           imageName,
 		ImagePullPolicy: resources.GetImagePullPolicy(deployment),
-		Command:         []string{"/usr/local/bin/carbide-api"},
-		Args:            []string{"migrate"},
+		Command:         []string{"/opt/carbide/carbide-api"},
+		Args:            []string{"migrate", "--datastore=$(CARBIDE_API_DATABASE_URL)"},
 		Env: []corev1.EnvVar{
-			{
-				Name: "CARBIDE_API_DATABASE_URL",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: fmt.Sprintf("%s-secret", APIName),
-						},
-						Key: "database-url",
-					},
-				},
+			{Name: "CARBIDE_API_DATABASE_URL", ValueFrom: secretKeyRef(pgSecretName, "uri")},
+		},
+		Resources: corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("100m"),
+				corev1.ResourceMemory: resource.MustParse("256Mi"),
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("500m"),
+				corev1.ResourceMemory: resource.MustParse("512Mi"),
 			},
 		},
 	}
@@ -346,6 +384,12 @@ func BuildAPIService(deployment *carbitev1alpha1.CarbideDeployment, namespace st
 					Name:       "grpc",
 					Port:       port,
 					TargetPort: intstr.FromInt32(port),
+					Protocol:   corev1.ProtocolTCP,
+				},
+				{
+					Name:       "metrics",
+					Port:       port + 1,
+					TargetPort: intstr.FromInt32(port + 1),
 					Protocol:   corev1.ProtocolTCP,
 				},
 			},
