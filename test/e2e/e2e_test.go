@@ -1510,7 +1510,8 @@ stringData:
   password: e2e-test-password
   dbname: %s
   username: %s
-`, user, namespace, user, user, user)
+  uri: "postgres://%s:e2e-test-password@postgres.postgres-e2e.svc:5432/%s?sslmode=disable"
+`, user, namespace, user, user, user, user, user)
 
 		secretFile := filepath.Join("/tmp", fmt.Sprintf("e2e-pg-secret-%s.yaml", user))
 		err := os.WriteFile(secretFile, []byte(secretYAML), 0o644)
