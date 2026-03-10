@@ -134,6 +134,20 @@ func (r *CoreReconciler) Reconcile(ctx context.Context, deployment *carbitev1alp
 				return r.failedStatus(fmt.Sprintf("Failed to create %s Certificate", name), err), err
 			}
 		}
+
+		// Wait for cert secrets to exist before creating Deployments
+		for _, name := range saNames {
+			secretName := name + "-tls"
+			available, err := utils.IsSecretAvailable(ctx, r.Client, namespace, secretName)
+			if err != nil {
+				return r.failedStatus(fmt.Sprintf("Failed to check cert secret %s", secretName), err), err
+			}
+			if !available {
+				logger.Info("Waiting for cert-manager to issue certificate", "secret", secretName)
+				tierStatus.Message = fmt.Sprintf("Waiting for TLS certificate %s", secretName)
+				return tierStatus, nil
+			}
+		}
 	}
 
 	// 1. ConfigMaps, Secrets, and DNS ConfigMap
