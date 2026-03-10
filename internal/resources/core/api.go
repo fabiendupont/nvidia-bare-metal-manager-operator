@@ -66,36 +66,92 @@ func BuildAPIConfigMap(deployment *carbitev1alpha1.CarbideDeployment, namespace 
 		rbacBypass = securityConfig.RBACBypass
 	}
 
-	// Build TOML config matching SNO reference
+	networkIP := networkConfig.IP
+	if networkIP == "" {
+		networkIP = "0.0.0.0"
+	}
+
+	// Build TOML config matching sno-manifests carbide-api-configmap.yaml
 	tomlConfig := fmt.Sprintf(`listen = "[::]:%d"
 listen_mode = "%s"
 metrics_endpoint = "[::]:%d"
+asn = 65535
+dhcp_servers = ["%s"]
+route_servers = ["%s"]
+enable_route_servers = true
+dpu_ipmi_tool_impl = "prod"
+initial_domain_name = "%s"
+initial_dpu_agent_upgrade_policy = "off"
+nvue_enabled = true
+attestation_enabled = false
 
 [tls]
 root_cafile_path = "%s/ca.crt"
 identity_pemfile_path = "%s/tls.crt"
 identity_keyfile_path = "%s/tls.key"
 
+[site_explorer]
+enabled = true
+explorations_per_run = 200
+run_interval = "10s"
+create_machines = true
+override_target_port = 443
+allow_zero_dpu_hosts = true
+
+[auth]
+permissive_mode = %t
+casbin_policy_file = "/opt/carbide/casbin-policy.csv"
+
 [auth.trust]
 spiffe_trust_domain = "%s"
 spiffe_service_base_paths = ["/ns/%s/sa/"]
 spiffe_machine_base_path = "/ns/%s/machine/"
+additional_issuer_cns = []
+
+[machine_state_controller]
+dpu_wait_time = "10s"
+power_down_wait = "10s"
+failure_retry_time = "30s"
+dpu_up_threshold = "52w"
+[machine_state_controller.controller]
+iteration_time = "10s"
+
+[network_segment_state_controller]
+network_segment_drain_time = "60s"
+[network_segment_state_controller.controller]
+iteration_time = "2s"
+
+[ib_partition_state_controller.controller]
+iteration_time = "60s"
 `,
 		port, listenMode, port+1,
+		networkIP, networkIP,
+		domain,
 		tls.CertDir, tls.CertDir, tls.CertDir,
+		rbacBypass || true, // permissive_mode — default true for now
 		trustDomain,
 		namespace, namespace,
 	)
 
-	if rbacBypass {
-		tomlConfig += "\n[auth]\nbypass = true\n"
+	// Add network sections to TOML for site profiles
+	if deployment.Spec.Profile == carbitev1alpha1.ProfileSite ||
+		deployment.Spec.Profile == carbitev1alpha1.ProfileManagementWithSite {
+		if networkConfig.AdminNetworkCIDR != "" {
+			tomlConfig += fmt.Sprintf(`
+[networks.admin]
+type = "admin"
+prefix = "%s"
+mtu = 1500
+reserve_first = 20
+`, networkConfig.AdminNetworkCIDR)
+		}
 	}
 
 	data := map[string]string{
 		"carbide-api-config.toml": tomlConfig,
 	}
 
-	// Keep env-style data for backward compat with migration init container
+	// Keep env-style data for backward compat
 	data["CARBIDE_DOMAIN"] = domain
 	data["POSTGRES_HOST"] = pgHost
 	data["POSTGRES_PORT"] = fmt.Sprintf("%d", pgPort)

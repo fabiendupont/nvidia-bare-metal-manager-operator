@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -479,6 +480,30 @@ func (r *CoreReconciler) reconcileVault(ctx context.Context, deployment *carbite
 	switch vaultConfig.Mode {
 	case carbitev1alpha1.ManagedMode:
 		logger.Info("Reconciling managed Vault")
+
+		// Create ServiceAccount and RBAC for Vault Helm installer
+		vaultSA := core.BuildServiceAccount("vault-helm-installer", namespace, deployment)
+		if err := r.createOrUpdate(ctx, vaultSA); err != nil {
+			return false, fmt.Errorf("failed to create vault-helm-installer SA: %w", err)
+		}
+
+		// Bind SA to admin role so Helm can create resources
+		vaultRB := &rbacv1.ClusterRoleBinding{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: fmt.Sprintf("vault-helm-installer-%s", namespace),
+			},
+			Subjects: []rbacv1.Subject{
+				{Kind: "ServiceAccount", Name: "vault-helm-installer", Namespace: namespace},
+			},
+			RoleRef: rbacv1.RoleRef{
+				APIGroup: "rbac.authorization.k8s.io",
+				Kind:     "ClusterRole",
+				Name:     "cluster-admin",
+			},
+		}
+		if err := r.createOrUpdate(ctx, vaultRB); err != nil {
+			return false, fmt.Errorf("failed to create vault-helm-installer ClusterRoleBinding: %w", err)
+		}
 
 		// Create Vault Helm values ConfigMap
 		valuesCM := core.BuildVaultHelmValuesConfigMap(deployment, namespace)
