@@ -945,12 +945,49 @@ func TestValidateCreate_DelegatesToValidate(t *testing.T) {
 }
 
 func TestValidateUpdate_DelegatesToValidate(t *testing.T) {
+	old := newCarbideDeployment("test", ProfileManagement)
 	cd := newCarbideDeployment("test", ProfileManagement)
 	cd.Spec.Rest = nil
 
-	_, err := cd.ValidateUpdate(context.Background(), nil, cd)
+	_, err := cd.ValidateUpdate(context.Background(), old, cd)
 	if err == nil {
 		t.Error("expected ValidateUpdate to return error from validateCarbideDeployment")
+	}
+}
+
+func TestValidateUpdate_ProfileImmutable(t *testing.T) {
+	old := newCarbideDeployment("test", ProfileManagement)
+	cd := newCarbideDeployment("test", ProfileSite)
+	cd.Spec.Network.Interface = "eth0"
+	cd.Spec.Network.IP = "10.0.0.1"
+	cd.Spec.Network.AdminNetworkCIDR = "10.0.0.0/24"
+
+	_, err := cd.ValidateUpdate(context.Background(), old, cd)
+	if err == nil {
+		t.Error("expected error when changing profile")
+	}
+}
+
+func TestValidateUpdate_ProfileUnchangedPasses(t *testing.T) {
+	old := newCarbideDeployment("test", ProfileManagement)
+	cd := newCarbideDeployment("test", ProfileManagement)
+	cd.Spec.Version = "v2.0.0"
+
+	_, err := cd.ValidateUpdate(context.Background(), old, cd)
+	if err != nil {
+		t.Errorf("expected no error when profile unchanged, got: %v", err)
+	}
+}
+
+func TestValidateUpdate_NamespaceImmutable(t *testing.T) {
+	old := newCarbideDeployment("test", ProfileManagement)
+	old.Spec.Infrastructure.Namespace = "ns-original"
+	cd := newCarbideDeployment("test", ProfileManagement)
+	cd.Spec.Infrastructure.Namespace = "ns-changed"
+
+	_, err := cd.ValidateUpdate(context.Background(), old, cd)
+	if err == nil {
+		t.Error("expected error when changing infrastructure namespace")
 	}
 }
 

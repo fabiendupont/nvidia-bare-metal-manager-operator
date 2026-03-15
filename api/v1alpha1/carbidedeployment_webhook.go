@@ -305,12 +305,28 @@ func (r *CarbideDeployment) ValidateCreate(_ context.Context, obj runtime.Object
 }
 
 // ValidateUpdate implements admission.CustomValidator for CarbideDeployment
-func (r *CarbideDeployment) ValidateUpdate(_ context.Context, _, newObj runtime.Object) (admission.Warnings, error) {
+func (r *CarbideDeployment) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+	oldCD, ok := oldObj.(*CarbideDeployment)
+	if !ok {
+		return nil, fmt.Errorf("expected CarbideDeployment, got %T", oldObj)
+	}
 	cd, ok := newObj.(*CarbideDeployment)
 	if !ok {
 		return nil, fmt.Errorf("expected CarbideDeployment, got %T", newObj)
 	}
 	carbidedeploymentlog.Info("validating update", "name", cd.Name)
+
+	// Immutability checks
+	if oldCD.Spec.Profile != cd.Spec.Profile {
+		return nil, fmt.Errorf("spec.profile is immutable (was %q, got %q); delete and recreate to change profile", oldCD.Spec.Profile, cd.Spec.Profile)
+	}
+	if oldCD.Spec.Infrastructure != nil && cd.Spec.Infrastructure != nil {
+		if oldCD.Spec.Infrastructure.Namespace != "" && cd.Spec.Infrastructure.Namespace != "" &&
+			oldCD.Spec.Infrastructure.Namespace != cd.Spec.Infrastructure.Namespace {
+			return nil, fmt.Errorf("spec.infrastructure.namespace is immutable (was %q, got %q)", oldCD.Spec.Infrastructure.Namespace, cd.Spec.Infrastructure.Namespace)
+		}
+	}
+
 	return cd.validateCarbideDeployment()
 }
 

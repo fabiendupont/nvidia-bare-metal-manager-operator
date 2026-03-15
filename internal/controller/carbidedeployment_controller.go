@@ -26,6 +26,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -44,7 +45,8 @@ const (
 // CarbideDeploymentReconciler reconciles a CarbideDeployment object
 type CarbideDeploymentReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 
 	// Tier reconcilers
 	InfrastructureReconciler *InfrastructureReconciler
@@ -120,10 +122,16 @@ func (r *CarbideDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 			logger.Info("Status init conflict, will retry", "error", err)
 			return ctrl.Result{Requeue: true}, nil
 		}
+		r.Recorder.Eventf(deployment, corev1.EventTypeNormal, "Initializing", "Starting %s deployment", deployment.Spec.Profile)
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	// 5. Update observedGeneration
+	// 5. Detect spec changes and transition to Updating phase
+	if deployment.Status.ObservedGeneration != 0 && deployment.Status.ObservedGeneration < deployment.Generation && deployment.Status.Phase == carbitev1alpha1.PhaseReady {
+		deployment.Status.Phase = carbitev1alpha1.PhaseUpdating
+		r.Recorder.Event(deployment, corev1.EventTypeNormal, "Updating", "Spec changed, reconciling updates")
+	}
+
 	deployment.Status.ObservedGeneration = deployment.Generation
 
 	// 6. TLS prerequisite check
@@ -135,6 +143,7 @@ func (r *CarbideDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		if !tlsAvailable {
 			deployment.Status.Phase = carbitev1alpha1.PhaseFailed
 			conditions.SetReadyCondition(deployment)
+			r.Recorder.Eventf(deployment, corev1.EventTypeWarning, "TLSUnavailable", "TLS backend %s not available", deployment.Spec.TLS.Mode)
 			// Re-fetch to avoid conflict
 			latest := &carbitev1alpha1.CarbideDeployment{}
 			if getErr := r.Get(ctx, req.NamespacedName, latest); getErr == nil {
@@ -159,6 +168,7 @@ func (r *CarbideDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 			err = infraErr
 			logger.Error(err, "Failed to reconcile Infrastructure tier")
 			deployment.Status.Phase = carbitev1alpha1.PhaseFailed
+			r.Recorder.Eventf(deployment, corev1.EventTypeWarning, "InfrastructureFailed", "Infrastructure tier failed: %v", err)
 		} else if !infraReady {
 			requeueRequired = true
 			logger.Info("Infrastructure tier not ready yet")
@@ -176,6 +186,7 @@ func (r *CarbideDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 			err = coreErr
 			logger.Error(err, "Failed to reconcile Core tier")
 			deployment.Status.Phase = carbitev1alpha1.PhaseFailed
+			r.Recorder.Eventf(deployment, corev1.EventTypeWarning, "CoreFailed", "Core tier failed: %v", err)
 		} else if !coreReady {
 			requeueRequired = true
 			logger.Info("Core tier not ready yet")
@@ -192,6 +203,7 @@ func (r *CarbideDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 			err = restErr
 			logger.Error(err, "Failed to reconcile Rest tier")
 			deployment.Status.Phase = carbitev1alpha1.PhaseFailed
+			r.Recorder.Eventf(deployment, corev1.EventTypeWarning, "RestFailed", "REST tier failed: %v", err)
 		} else if !restReady {
 			requeueRequired = true
 			logger.Info("Rest tier not ready yet")
@@ -199,7 +211,13 @@ func (r *CarbideDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	}
 
 	// 8. Update overall conditions
+	previousPhase := deployment.Status.Phase
 	conditions.SetReadyCondition(deployment)
+
+	// Record event on phase transitions
+	if deployment.Status.Phase == carbitev1alpha1.PhaseReady && previousPhase != carbitev1alpha1.PhaseReady {
+		r.Recorder.Event(deployment, corev1.EventTypeNormal, "Ready", "All components are ready")
+	}
 
 	// 9. Update status — re-fetch to avoid conflict with concurrent modifications
 	// (e.g., webhook defaulting updates the object while we were reconciling)
@@ -345,6 +363,7 @@ func (r *CarbideDeploymentReconciler) reconcileDelete(ctx context.Context, deplo
 	// Resources are deleted automatically via owner references, but we can add
 	// custom cleanup logic here if needed
 
+	r.Recorder.Event(deployment, corev1.EventTypeNormal, "Deleting", "Cleaning up managed resources")
 	logger.Info("Performing cleanup")
 
 	// Remove finalizer
@@ -360,6 +379,10 @@ func (r *CarbideDeploymentReconciler) reconcileDelete(ctx context.Context, deplo
 
 // SetupWithManager sets up the controller with the Manager
 func (r *CarbideDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if r.Recorder == nil {
+		r.Recorder = mgr.GetEventRecorderFor("carbidedeployment-controller")
+	}
+
 	// Initialize tier reconcilers
 	r.InfrastructureReconciler = &InfrastructureReconciler{
 		Client: r.Client,

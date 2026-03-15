@@ -29,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -218,7 +219,7 @@ func keycloakCRDs() []client.Object {
 func TestReconcile_NotFound_NoError(t *testing.T) {
 	s := testScheme()
 	c := buildFakeClient(s)
-	r := &CarbideDeploymentReconciler{Client: c, Scheme: s}
+	r := &CarbideDeploymentReconciler{Client: c, Scheme: s, Recorder: record.NewFakeRecorder(10)}
 
 	result, err := r.Reconcile(context.Background(), reconcile.Request{
 		NamespacedName: types.NamespacedName{Name: "nonexistent", Namespace: "default"},
@@ -235,7 +236,7 @@ func TestReconcile_AddsFinalizer(t *testing.T) {
 	s := testScheme()
 	dep := newTestDeployment("test", carbitev1alpha1.ProfileManagement)
 	c := buildFakeClient(s, dep)
-	r := &CarbideDeploymentReconciler{Client: c, Scheme: s}
+	r := &CarbideDeploymentReconciler{Client: c, Scheme: s, Recorder: record.NewFakeRecorder(10)}
 
 	result, err := r.Reconcile(context.Background(), reconcile.Request{
 		NamespacedName: types.NamespacedName{Name: "test", Namespace: "default"},
@@ -270,7 +271,7 @@ func TestReconcile_InitializesStatus(t *testing.T) {
 	// Pre-add finalizer so we skip that step
 	dep.Finalizers = []string{"carbide.nvidia.com/finalizer"}
 	c := buildFakeClient(s, dep)
-	r := &CarbideDeploymentReconciler{Client: c, Scheme: s}
+	r := &CarbideDeploymentReconciler{Client: c, Scheme: s, Recorder: record.NewFakeRecorder(10)}
 
 	_, err := r.Reconcile(context.Background(), reconcile.Request{
 		NamespacedName: types.NamespacedName{Name: "test", Namespace: "default"},
@@ -682,7 +683,7 @@ func TestReconcile_Deletion_RemovesFinalizer(t *testing.T) {
 	dep.DeletionTimestamp = &now
 
 	c := buildFakeClient(s, dep)
-	r := &CarbideDeploymentReconciler{Client: c, Scheme: s}
+	r := &CarbideDeploymentReconciler{Client: c, Scheme: s, Recorder: record.NewFakeRecorder(10)}
 
 	_, err := r.Reconcile(context.Background(), reconcile.Request{
 		NamespacedName: types.NamespacedName{Name: "test-del", Namespace: "default"},
